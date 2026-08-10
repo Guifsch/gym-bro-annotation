@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { requireAuth } from '../middleware/requireAuth';
+import { Sessao } from '../models/Sessao';
 import { Treino } from '../models/Treino';
 import { asyncHandler } from '../utils/asyncHandler';
 import { createTreinoSchema, updateTreinoSchema } from '../validation/workout';
@@ -66,6 +67,9 @@ router.delete(
       res.status(404).json({ error: 'Treino não encontrado' });
       return;
     }
+
+    await Sessao.deleteMany({ treinoId: req.params.id, userId: req.user!.id });
+
     res.status(204).end();
   })
 );
