@@ -3,9 +3,11 @@ import { Redirect, Tabs } from 'expo-router';
 import type { BottomTabBarButtonProps } from 'expo-router/build/react-navigation/bottom-tabs/types';
 import { useEffect } from 'react';
 import { Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuthStore } from '@/auth/authStore';
+import { LoadingView } from '@/components/loading-view';
+import { ThemedView } from '@/components/themed-view';
 import { Brand } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -45,7 +47,13 @@ export default function TabsLayout() {
   }
 
   if (status !== 'authenticated') {
-    return null;
+    return (
+      <ThemedView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+          <LoadingView label="Conectando..." />
+        </SafeAreaView>
+      </ThemedView>
+    );
   }
 
   return (

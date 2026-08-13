@@ -71,7 +71,7 @@ export default function SessaoDetalheScreen() {
   if (notFound) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <BackHeader title="Treino removido" />
           <EmptyState
             icon="alert-circle-outline"
@@ -87,7 +87,7 @@ export default function SessaoDetalheScreen() {
   if (loading || !sessao || !treino) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <LoadingView />
         </SafeAreaView>
       </ThemedView>
@@ -96,7 +96,7 @@ export default function SessaoDetalheScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title={treino.nome} subtitle={formatDateDisplay(date)} />
 
         {gruposPorCategoria.length === 0 ? (

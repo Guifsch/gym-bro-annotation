@@ -52,7 +52,7 @@ export default function TreinosListScreen() {
     }
   }
 
-  async function handleDelete(treino: Treino) {
+  async function performDelete(treino: Treino) {
     try {
       await deleteTreino(treino._id);
       setTreinos((prev) => prev.filter((t) => t._id !== treino._id));
@@ -62,9 +62,16 @@ export default function TreinosListScreen() {
     }
   }
 
+  function handleDelete(treino: Treino) {
+    Alert.alert('Excluir treino?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => performDelete(treino) },
+    ]);
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <TabHeader title="Treinos" />
 
         <ScrollView

@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -17,27 +16,32 @@ import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioEntryEditor, type LogFields } from '@/components/exercicio-entry-editor';
-import { GradientButton } from '@/components/gradient-button';
+import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
+import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { LoadingView } from '@/components/loading-view';
+import { PercentualTable } from '@/components/percentual-table';
 import { showToast } from '@/components/toast';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
 import { enqueueUpsertSessaoEntry } from '@/offline/queue';
 import type { Exercicio, Sessao } from '@/types/workout';
 
 export default function ExercicioDetalheScreen() {
+  const theme = useTheme();
   const { date, sessaoId, exercicioId } = useLocalSearchParams<{ date: string; sessaoId: string; exercicioId: string }>();
 
   const [sessao, setSessao] = useState<Sessao | null>(null);
   const [exercicio, setExercicio] = useState<Exercicio | null>(null);
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [cargaMaximaText, setCargaMaximaText] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [uploadingImagem, setUploadingImagem] = useState(false);
+  const [historicoVisible, setHistoricoVisible] = useState(false);
 
   const load = useCallback(async () => {
     const [sessaoData, exerciciosData] = await Promise.all([getSessao(sessaoId), listExercicios()]);
@@ -47,6 +51,7 @@ export default function ExercicioDetalheScreen() {
     setExercicio(exercicioData);
     setNome(exercicioData.nome);
     setDescricao(exercicioData.descricao ?? '');
+    setCargaMaximaText(exercicioData.cargaMaximaKg !== undefined ? String(exercicioData.cargaMaximaKg) : '');
   }, [sessaoId, exercicioId]);
 
   useFocusEffect(
@@ -62,7 +67,7 @@ export default function ExercicioDetalheScreen() {
   if (notFound) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <BackHeader title="Exercício removido" />
           <EmptyState
             icon="alert-circle-outline"
@@ -91,35 +96,29 @@ export default function ExercicioDetalheScreen() {
     showToast('Descrição atualizada');
   }
 
-  async function handleTakePhoto() {
+  async function handleSaveCargaMaxima() {
     if (!exercicio) return;
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return;
-
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 });
-    const asset = result.assets?.[0];
-    if (result.canceled || !asset) return;
-
-    setUploadingImagem(true);
-    try {
-      const updated = await uploadExercicioImagem(exercicio._id, asset.uri, asset.mimeType ?? 'image/jpeg');
-      setExercicio(updated);
-      showToast('Foto salva');
-    } finally {
-      setUploadingImagem(false);
-    }
+    const trimmed = cargaMaximaText.trim();
+    const parsed = trimmed ? Number(trimmed.replace(',', '.')) : undefined;
+    if (trimmed && !Number.isFinite(parsed)) return;
+    if (parsed === exercicio.cargaMaximaKg) return;
+    const updated = await updateExercicio(exercicio._id, { cargaMaximaKg: parsed });
+    setExercicio(updated);
+    showToast('Carga máxima atualizada');
   }
 
-  async function handleDeleteImagem() {
+  async function handleUploadImagem(uri: string, contentType: string) {
     if (!exercicio) return;
-    setUploadingImagem(true);
-    try {
-      const updated = await deleteExercicioImagem(exercicio._id);
-      setExercicio(updated);
-      showToast('Foto removida');
-    } finally {
-      setUploadingImagem(false);
-    }
+    const updated = await uploadExercicioImagem(exercicio._id, uri, contentType);
+    setExercicio(updated);
+    showToast('Foto salva');
+  }
+
+  async function handleDeleteImagem(key: string) {
+    if (!exercicio) return;
+    const updated = await deleteExercicioImagem(exercicio._id, key);
+    setExercicio(updated);
+    showToast('Foto removida');
   }
 
   function handleSaveFields(fields: LogFields) {
@@ -133,7 +132,7 @@ export default function ExercicioDetalheScreen() {
   if (loading || !sessao || !exercicio) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <LoadingView />
         </SafeAreaView>
       </ThemedView>
@@ -144,8 +143,18 @@ export default function ExercicioDetalheScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <BackHeader title="Exercício" />
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <BackHeader title="Exercício" />
+          </View>
+          <Pressable onPress={() => setHistoricoVisible(true)} hitSlop={8} style={styles.historicoButton}>
+            <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Histórico
+            </ThemedText>
+          </Pressable>
+        </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Card style={styles.nameCard}>
@@ -160,6 +169,17 @@ export default function ExercicioDetalheScreen() {
               numberOfLines={3}
               style={styles.multiline}
             />
+            <LabeledTextField
+              label="Carga máxima (1RM, opcional)"
+              value={cargaMaximaText}
+              onChangeText={setCargaMaximaText}
+              onBlur={handleSaveCargaMaxima}
+              keyboardType="decimal-pad"
+              maxLength={7}
+            />
+            {Number(cargaMaximaText.replace(',', '.')) > 0 && (
+              <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
+            )}
           </Card>
 
           <ExercicioEntryEditor
@@ -171,25 +191,17 @@ export default function ExercicioDetalheScreen() {
           />
 
           <Card style={styles.photoCard}>
-            <ThemedText type="smallBold">Foto do equipamento</ThemedText>
-            {exercicio.imagemUrl ? (
-              <View style={styles.photoWrap}>
-                <Image source={{ uri: exercicio.imagemUrl }} style={styles.photo} />
-                <Pressable onPress={handleDeleteImagem} disabled={uploadingImagem} style={styles.photoDelete}>
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                </Pressable>
-              </View>
-            ) : (
-              <GradientButton
-                title="Tirar foto"
-                icon={<Ionicons name="camera-outline" size={20} color="#fff" />}
-                onPress={handleTakePhoto}
-                loading={uploadingImagem}
-              />
-            )}
+            <ThemedText type="smallBold">Fotos do equipamento</ThemedText>
+            <ExercicioImageGallery imagens={exercicio.imagens ?? []} onUpload={handleUploadImagem} onDelete={handleDeleteImagem} />
           </Card>
         </ScrollView>
       </SafeAreaView>
+
+      <ExercicioHistoricoModal
+        visible={historicoVisible}
+        exercicioId={exercicio._id}
+        onClose={() => setHistoricoVisible(false)}
+      />
     </ThemedView>
   );
 }
@@ -197,18 +209,10 @@ export default function ExercicioDetalheScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  historicoButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   nameCard: { gap: Spacing.two },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   photoCard: { gap: Spacing.two },
-  photoWrap: { position: 'relative' },
-  photo: { width: '100%', height: 220, borderRadius: Radius.md },
-  photoDelete: {
-    position: 'absolute',
-    top: Spacing.two,
-    right: Spacing.two,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: Radius.full,
-    padding: Spacing.two,
-  },
 });

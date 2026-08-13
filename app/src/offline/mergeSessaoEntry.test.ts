@@ -11,6 +11,7 @@ const exercicio: Exercicio = {
   sets: 3,
   reps: 10,
   pesoKg: 30,
+  imagens: [],
 };
 
 const emptySessao: Sessao = {

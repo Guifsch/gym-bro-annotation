@@ -69,7 +69,7 @@ export default function CategoriasScreen() {
     showToast('Salvo');
   }
 
-  async function handleDelete(categoria: Categoria) {
+  async function performDelete(categoria: Categoria) {
     try {
       await deleteCategoria(categoria._id);
       setCategorias((prev) => prev.filter((c) => c._id !== categoria._id));
@@ -79,9 +79,16 @@ export default function CategoriasScreen() {
     }
   }
 
+  function handleDelete(categoria: Categoria) {
+    Alert.alert('Excluir categoria?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => performDelete(categoria) },
+    ]);
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Categorias" />
 
         <ScrollView

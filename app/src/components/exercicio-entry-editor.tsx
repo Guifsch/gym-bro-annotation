@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/card';
+import { GradientButton } from '@/components/gradient-button';
 import { ThemedText } from '@/components/themed-text';
 import { showToast } from '@/components/toast';
 import { Radius, Spacing, Brand } from '@/constants/theme';
@@ -28,12 +29,26 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
   const [parserText, setParserText] = useState('');
   const [parserError, setParserError] = useState<string | null>(null);
 
-  function saveManualField(field: LogField, rawValue: string) {
+  function parseFieldValue(field: LogField, rawValue: string): number | undefined {
     const trimmed = rawValue.trim();
-    if (!trimmed) return;
+    if (!trimmed) return undefined;
     const parsed = field === 'pesoKg' ? Number(trimmed.replace(',', '.')) : Math.round(Number(trimmed));
-    if (!Number.isFinite(parsed) || parsed <= 0) return;
-    onSaveFields({ [field]: parsed });
+    if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+    return parsed;
+  }
+
+  function handleManualSave() {
+    const fields: LogFields = {};
+    const parsedSets = parseFieldValue('sets', setsText);
+    const parsedReps = parseFieldValue('reps', repsText);
+    const parsedPeso = parseFieldValue('pesoKg', pesoText);
+    if (parsedSets !== undefined) fields.sets = parsedSets;
+    if (parsedReps !== undefined) fields.reps = parsedReps;
+    if (parsedPeso !== undefined) fields.pesoKg = parsedPeso;
+
+    if (Object.keys(fields).length === 0) return;
+
+    onSaveFields(fields);
     showToast('Salvo');
   }
 
@@ -76,7 +91,6 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
           <TextInput
             value={setsText}
             onChangeText={setSetsText}
-            onBlur={() => saveManualField('sets', setsText)}
             keyboardType="number-pad"
             maxLength={3}
             style={fieldStyle}
@@ -89,7 +103,6 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
           <TextInput
             value={repsText}
             onChangeText={setRepsText}
-            onBlur={() => saveManualField('reps', repsText)}
             keyboardType="number-pad"
             maxLength={4}
             style={fieldStyle}
@@ -102,7 +115,6 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
           <TextInput
             value={pesoText}
             onChangeText={setPesoText}
-            onBlur={() => saveManualField('pesoKg', pesoText)}
             keyboardType="decimal-pad"
             maxLength={7}
             style={fieldStyle}
@@ -134,6 +146,8 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
         </View>
         {parserError && <ThemedText style={styles.error}>{parserError}</ThemedText>}
       </View>
+
+      <GradientButton title="Salvar" onPress={handleManualSave} />
     </Card>
   );
 }

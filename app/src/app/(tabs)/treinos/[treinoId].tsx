@@ -77,7 +77,7 @@ export default function TreinoEditorScreen() {
     setTreino(updated);
   }
 
-  async function handleDeleteTreino() {
+  async function performDeleteTreino() {
     try {
       await deleteTreino(treinoId);
       router.replace('/(tabs)/treinos');
@@ -86,10 +86,17 @@ export default function TreinoEditorScreen() {
     }
   }
 
+  function handleDeleteTreino() {
+    Alert.alert('Excluir treino?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: performDeleteTreino },
+    ]);
+  }
+
   if (loading || !treino) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <LoadingView />
         </SafeAreaView>
       </ThemedView>
@@ -98,7 +105,7 @@ export default function TreinoEditorScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Editar treino" />
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

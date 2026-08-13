@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "app",
+    "name": "gymbro",
     "slug": "app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.app"
+      "package": "com.anonymous.app",
+      "permissions": ["POST_NOTIFICATIONS"]
     },
     "web": {
       "output": "static",
@@ -41,7 +42,8 @@
           "cameraPermission": "Permita o acesso à câmera para fotografar o equipamento do exercício.",
           "photosPermission": "Permita o acesso às fotos para anexar uma imagem ao exercício."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

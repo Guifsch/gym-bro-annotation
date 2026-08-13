@@ -1,7 +1,7 @@
 import { File } from 'expo-file-system';
 
 import { getAccessToken } from '@/auth/tokenMemory';
-import type { Categoria, DiaTreino, Exercicio, Sessao, Treino } from '@/types/workout';
+import type { Categoria, DiaTreino, Exercicio, ExercicioHistoricoEntry, Sessao, Treino } from '@/types/workout';
 
 import { API_URL, apiClient } from './apiClient';
 
@@ -37,6 +37,7 @@ export interface CreateExercicioParams {
   sets: number;
   reps: number;
   pesoKg: number;
+  cargaMaximaKg?: number;
 }
 
 export async function createExercicio(params: CreateExercicioParams): Promise<Exercicio> {
@@ -51,6 +52,7 @@ export interface UpdateExercicioParams {
   sets?: number;
   reps?: number;
   pesoKg?: number;
+  cargaMaximaKg?: number;
 }
 
 export async function updateExercicio(id: string, params: UpdateExercicioParams): Promise<Exercicio> {
@@ -62,9 +64,19 @@ export async function deleteExercicio(id: string): Promise<void> {
   await apiClient.delete(`/api/exercicios/${id}`);
 }
 
+export async function getExercicioHistorico(id: string): Promise<ExercicioHistoricoEntry[]> {
+  const { data } = await apiClient.get(`/api/exercicios/${id}/historico`);
+  return data.historico;
+}
+
+export async function deleteExercicioHistoricoEntry(id: string, entryId: string): Promise<ExercicioHistoricoEntry[]> {
+  const { data } = await apiClient.delete(`/api/exercicios/${id}/historico/${entryId}`);
+  return data.historico;
+}
+
 export async function uploadExercicioImagem(id: string, uri: string, contentType: string): Promise<Exercicio> {
   const token = getAccessToken();
-  const result = await new File(uri).upload(`${API_URL}/api/exercicios/${id}/imagem`, {
+  const result = await new File(uri).upload(`${API_URL}/api/exercicios/${id}/imagens`, {
     headers: {
       'Content-Type': contentType,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -76,8 +88,8 @@ export async function uploadExercicioImagem(id: string, uri: string, contentType
   return JSON.parse(result.body).exercicio;
 }
 
-export async function deleteExercicioImagem(id: string): Promise<Exercicio> {
-  const { data } = await apiClient.delete(`/api/exercicios/${id}/imagem`);
+export async function deleteExercicioImagem(id: string, key: string): Promise<Exercicio> {
+  const { data } = await apiClient.delete(`/api/exercicios/${id}/imagens/${encodeURIComponent(key)}`);
   return data.exercicio;
 }
 

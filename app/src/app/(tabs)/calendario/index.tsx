@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listSessaoDatesForMonth } from '@/api/workoutApi';
 import { Card } from '@/components/card';
 import { MonthCalendar } from '@/components/month-calendar';
+import { RestTimer } from '@/components/rest-timer';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -49,18 +50,21 @@ export default function CalendarioScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <TabHeader title="Calendário" />
-        <Card>
-          <MonthCalendar
-            year={year}
-            month={month}
-            markedDates={markedDates}
-            onSelectDate={(date) => router.push(`/(tabs)/calendario/${date}`)}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
-          />
-        </Card>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <Card>
+            <MonthCalendar
+              year={year}
+              month={month}
+              markedDates={markedDates}
+              onSelectDate={(date) => router.push(`/(tabs)/calendario/${date}`)}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+            />
+          </Card>
+          <RestTimer />
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -69,4 +73,5 @@ export default function CalendarioScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
+  scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
 });

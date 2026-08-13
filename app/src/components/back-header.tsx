@@ -9,15 +9,16 @@ import { useTheme } from '@/hooks/use-theme';
 interface BackHeaderProps {
   title: string;
   subtitle?: string;
+  onBack?: () => void;
 }
 
-export function BackHeader({ title, subtitle }: BackHeaderProps) {
+export function BackHeader({ title, subtitle, onBack }: BackHeaderProps) {
   const theme = useTheme();
 
   return (
     <View style={styles.row}>
       <Pressable
-        onPress={() => router.back()}
+        onPress={onBack ?? (() => router.back())}
         hitSlop={12}
         style={[styles.backButton, { backgroundColor: theme.backgroundElement }]}>
         <Ionicons name="chevron-back" size={20} color={theme.text} />

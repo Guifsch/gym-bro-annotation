@@ -5,13 +5,24 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { createExercicio, deleteExercicio, listCategorias, listExercicios, updateExercicio } from '@/api/workoutApi';
+import {
+  createExercicio,
+  deleteExercicio,
+  deleteExercicioImagem,
+  listCategorias,
+  listExercicios,
+  updateExercicio,
+  uploadExercicioImagem,
+} from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
+import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
+import { PercentualTable } from '@/components/percentual-table';
 import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -26,13 +37,16 @@ export default function ExerciciosListaScreen() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [historicoVisible, setHistoricoVisible] = useState(false);
 
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [setsText, setSetsText] = useState('');
   const [repsText, setRepsText] = useState('');
   const [pesoText, setPesoText] = useState('');
+  const [cargaMaximaText, setCargaMaximaText] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -57,13 +71,31 @@ export default function ExerciciosListaScreen() {
     [categorias]
   );
 
+  const editingExercicio = useMemo(() => exercicios.find((e) => e._id === editingId) ?? null, [exercicios, editingId]);
+
+  async function handleUploadImagem(uri: string, contentType: string) {
+    if (!editingId) return;
+    const updated = await uploadExercicioImagem(editingId, uri, contentType);
+    setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+    showToast('Foto salva');
+  }
+
+  async function handleDeleteImagem(key: string) {
+    if (!editingId) return;
+    const updated = await deleteExercicioImagem(editingId, key);
+    setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+    showToast('Foto removida');
+  }
+
   function resetForm() {
     setEditingId(null);
+    setCreating(false);
     setNome('');
     setDescricao('');
     setSetsText('');
     setRepsText('');
     setPesoText('');
+    setCargaMaximaText('');
     setCategoriaId(null);
   }
 
@@ -74,6 +106,7 @@ export default function ExerciciosListaScreen() {
     setSetsText(String(exercicio.sets));
     setRepsText(String(exercicio.reps));
     setPesoText(String(exercicio.pesoKg));
+    setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
     setCategoriaId(exercicio.categoriaId);
   }
 
@@ -81,8 +114,14 @@ export default function ExerciciosListaScreen() {
     const parsedSets = Math.round(Number(setsText));
     const parsedReps = Math.round(Number(repsText));
     const parsedPeso = Number(pesoText.replace(',', '.'));
+    const parsedCargaMaxima = cargaMaximaText.trim() ? Number(cargaMaximaText.replace(',', '.')) : undefined;
 
-    if (!nome.trim() || !categoriaId || !Number.isFinite(parsedSets) || !Number.isFinite(parsedReps) || !Number.isFinite(parsedPeso)) {
+    if (!nome.trim() || !Number.isFinite(parsedSets) || !Number.isFinite(parsedReps) || !Number.isFinite(parsedPeso)) {
+      return;
+    }
+
+    if (!categoriaId) {
+      Alert.alert('Selecione uma categoria', 'Escolha uma categoria antes de salvar.');
       return;
     }
 
@@ -96,6 +135,7 @@ export default function ExerciciosListaScreen() {
           sets: parsedSets,
           reps: parsedReps,
           pesoKg: parsedPeso,
+          cargaMaximaKg: parsedCargaMaxima,
         });
         setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
       } else {
@@ -107,17 +147,19 @@ export default function ExerciciosListaScreen() {
           sets: parsedSets,
           reps: parsedReps,
           pesoKg: parsedPeso,
+          cargaMaximaKg: parsedCargaMaxima,
         });
         setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
+        setCreating(false);
+        setEditingId(created._id);
       }
       showToast('Salvo');
-      resetForm();
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(exercicio: Exercicio) {
+  async function performDelete(exercicio: Exercicio) {
     try {
       await deleteExercicio(exercicio._id);
       setExercicios((prev) => prev.filter((e) => e._id !== exercicio._id));
@@ -128,14 +170,28 @@ export default function ExerciciosListaScreen() {
     }
   }
 
-  const canSave = Boolean(nome.trim() && categoriaId && setsText && repsText && pesoText);
+  function handleDelete(exercicio: Exercicio) {
+    Alert.alert('Excluir exercício?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => performDelete(exercicio) },
+    ]);
+  }
+
+  const canSave = Boolean(nome.trim() && setsText && repsText && pesoText);
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Exercícios" />
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {!creating && !editingId ? (
+            <GradientButton
+              title="Criar exercício"
+              icon={<Ionicons name="add-circle-outline" size={20} color="#fff" />}
+              onPress={() => setCreating(true)}
+            />
+          ) : (
           <Card style={styles.formCard}>
             <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={120} />
             <LabeledTextField
@@ -178,6 +234,30 @@ export default function ExerciciosListaScreen() {
               </View>
             </View>
 
+            <LabeledTextField
+              label="Carga máxima (1RM, opcional)"
+              value={cargaMaximaText}
+              onChangeText={setCargaMaximaText}
+              keyboardType="decimal-pad"
+              maxLength={7}
+            />
+            {Number(cargaMaximaText.replace(',', '.')) > 0 && (
+              <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
+            )}
+
+            {editingExercicio && (
+              <View style={styles.photoSection}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Fotos
+                </ThemedText>
+                <ExercicioImageGallery
+                  imagens={editingExercicio.imagens ?? []}
+                  onUpload={handleUploadImagem}
+                  onDelete={handleDeleteImagem}
+                />
+              </View>
+            )}
+
             <ThemedText type="small" themeColor="textSecondary">
               Categoria
             </ThemedText>
@@ -204,50 +284,70 @@ export default function ExerciciosListaScreen() {
               )}
             </View>
 
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <GradientButton
-                  title={editingId ? 'Salvar alterações' : 'Criar exercício'}
-                  onPress={handleSave}
-                  loading={saving}
-                  disabled={!canSave}
-                />
-              </View>
-              {editingId && (
-                <Pressable onPress={resetForm} hitSlop={8}>
-                  <ThemedText type="small">cancelar</ThemedText>
+            <View style={styles.actionsColumn}>
+              <GradientButton
+                title={editingId ? 'Salvar alterações' : 'Criar exercício'}
+                onPress={handleSave}
+                loading={saving}
+                disabled={!canSave}
+              />
+              <View style={styles.secondaryRow}>
+                {editingId && (
+                  <Pressable onPress={() => setHistoricoVisible(true)} hitSlop={8} style={styles.secondaryButton}>
+                    <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Histórico
+                    </ThemedText>
+                  </Pressable>
+                )}
+                <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
+                  <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Cancelar
+                  </ThemedText>
                 </Pressable>
-              )}
+              </View>
             </View>
           </Card>
+          )}
 
-          {!loading && exercicios.length === 0 ? (
-            <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
-          ) : (
-            <View style={styles.list}>
-              {exercicios.map((item) => (
-                <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                  <Pressable onPress={() => startEditing(item)}>
-                    <Card style={styles.itemRow}>
-                      <CategoryIcon nome={categoriaNomeById[item.categoriaId] ?? ''} />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText type="smallBold">{item.nome}</ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
-                          {categoriaNomeById[item.categoriaId] ?? 'Categoria'} · {item.sets}x{item.reps} ·{' '}
-                          {item.pesoKg}kg
-                        </ThemedText>
-                      </View>
-                      <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                        <Ionicons name="trash-outline" size={18} color="#e53935" />
+          {!creating && !editingId && (
+            <>
+              {!loading && exercicios.length === 0 ? (
+                <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
+              ) : (
+                <View style={styles.list}>
+                  {exercicios.map((item) => (
+                    <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
+                      <Pressable onPress={() => startEditing(item)}>
+                        <Card style={styles.itemRow}>
+                          <CategoryIcon nome={categoriaNomeById[item.categoriaId] ?? ''} />
+                          <View style={{ flex: 1 }}>
+                            <ThemedText type="smallBold">{item.nome}</ThemedText>
+                            <ThemedText type="small" themeColor="textSecondary">
+                              {categoriaNomeById[item.categoriaId] ?? 'Categoria'} · {item.sets}x{item.reps} ·{' '}
+                              {item.pesoKg}kg
+                            </ThemedText>
+                          </View>
+                          <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                            <Ionicons name="trash-outline" size={18} color="#e53935" />
+                          </Pressable>
+                        </Card>
                       </Pressable>
-                    </Card>
-                  </Pressable>
-                </SwipeableRow>
-              ))}
-            </View>
+                    </SwipeableRow>
+                  ))}
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       </SafeAreaView>
+
+      <ExercicioHistoricoModal
+        visible={historicoVisible}
+        exercicioId={editingId}
+        onClose={() => setHistoricoVisible(false)}
+      />
     </ThemedView>
   );
 }
@@ -258,12 +358,15 @@ const styles = StyleSheet.create({
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   formCard: { gap: Spacing.two },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
+  photoSection: { gap: Spacing.two },
   fieldsRow: { flexDirection: 'row', gap: Spacing.two },
   field: { flex: 1 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   chip: { borderWidth: 1, borderRadius: Radius.full, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   chipTextActive: { color: '#fff', fontWeight: '700' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.one },
+  actionsColumn: { gap: Spacing.two, marginTop: Spacing.one },
+  secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.five },
+  secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   list: { gap: Spacing.two },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   deleteButton: { padding: Spacing.one },

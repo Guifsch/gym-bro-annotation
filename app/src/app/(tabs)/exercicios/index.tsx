@@ -38,7 +38,7 @@ function LandingOption({ icon, title, subtitle, onPress }: LandingOptionProps) {
 export default function ExerciciosLandingScreen() {
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <TabHeader title="Exercícios" />
 
         <LandingOption

@@ -3,6 +3,11 @@ export interface Categoria {
   nome: string;
 }
 
+export interface ExercicioImagem {
+  url: string;
+  key: string;
+}
+
 export interface Exercicio {
   _id: string;
   categoriaId: string;
@@ -11,7 +16,18 @@ export interface Exercicio {
   sets: number;
   reps: number;
   pesoKg: number;
-  imagemUrl?: string;
+  cargaMaximaKg?: number;
+  imagens: ExercicioImagem[];
+}
+
+export interface ExercicioHistoricoEntry {
+  _id: string;
+  nome?: string;
+  descricao?: string;
+  sets?: number;
+  reps?: number;
+  pesoKg?: number;
+  alteradoEm: string;
 }
 
 export interface Treino {
