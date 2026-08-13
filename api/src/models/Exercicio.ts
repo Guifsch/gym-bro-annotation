@@ -1,16 +1,34 @@
 import { Schema, model } from 'mongoose';
 
+const historicoEntrySchema = new Schema(
+  {
+    _id: { type: String, required: true },
+    nome: { type: String },
+    descricao: { type: String },
+    sets: { type: Number },
+    reps: { type: Number },
+    pesoKg: { type: Number },
+    alteradoEm: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const exercicioSchema = new Schema({
   _id: { type: String },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   categoriaId: { type: String, ref: 'Categoria', required: true },
   nome: { type: String, required: true, trim: true, maxlength: 120 },
   descricao: { type: String, trim: true, maxlength: 500 },
-  sets: { type: Number, required: true, min: 1, max: 50 },
-  reps: { type: Number, required: true, min: 1, max: 500 },
+  sets: { type: Number, required: true, min: 0, max: 50 },
+  reps: { type: Number, required: true, min: 0, max: 500 },
   pesoKg: { type: Number, required: true, min: 0, max: 1000 },
-  imagemUrl: { type: String },
-  imagemKey: { type: String },
+  cargaMaximaKg: { type: Number, min: 0, max: 2000 },
+  imagens: {
+    type: [{ url: { type: String, required: true }, key: { type: String, required: true } }],
+    default: [],
+    _id: false,
+  },
+  historico: { type: [historicoEntrySchema], default: [] },
   createdAt: { type: Date, default: Date.now },
 });
 

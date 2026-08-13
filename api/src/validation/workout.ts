@@ -19,18 +19,20 @@ export const createExercicioSchema = z.object({
   nome,
   descricao,
   categoriaId: uuid,
-  sets: z.number().int().min(1).max(50),
-  reps: z.number().int().min(1).max(500),
+  sets: z.number().int().min(0).max(50),
+  reps: z.number().int().min(0).max(500),
   pesoKg: z.number().min(0).max(1000),
+  cargaMaximaKg: z.number().min(0).max(2000).optional(),
 });
 
 export const updateExercicioSchema = z.object({
   nome: nome.optional(),
   descricao,
   categoriaId: uuid.optional(),
-  sets: z.number().int().min(1).max(50).optional(),
-  reps: z.number().int().min(1).max(500).optional(),
+  sets: z.number().int().min(0).max(50).optional(),
+  reps: z.number().int().min(0).max(500).optional(),
   pesoKg: z.number().min(0).max(1000).optional(),
+  cargaMaximaKg: z.number().min(0).max(2000).optional(),
 });
 
 export const createTreinoSchema = z.object({
