@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, AppState, Pressable, StyleSheet, Switch, View } from 'react-native';
 
+import { createTimerPreset, deleteTimerPreset, listTimerPresets } from '@/api/workoutApi';
 import { Card } from '@/components/card';
 import { GradientButton } from '@/components/gradient-button';
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +16,7 @@ import {
   setTimerAlarmPrefs,
   SNOOZE_SECONDS,
 } from '@/notifications/timerAlarmService';
+import type { TimerPreset } from '@/types/workout';
 
 function formatSeconds(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -23,8 +26,9 @@ function formatSeconds(totalSeconds: number): string {
 
 export function RestTimer() {
   const theme = useTheme();
-  const [minutes, setMinutes] = useState(1);
-  const [seconds, setSeconds] = useState(30);
+  const [minutes, setMinutes] = useState(2);
+  const [seconds, setSeconds] = useState(0);
+  const [presets, setPresets] = useState<TimerPreset[]>([]);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -43,6 +47,38 @@ export function RestTimer() {
   useEffect(() => {
     setTimerAlarmPrefs(vibrarAtivo, somAtivo);
   }, [vibrarAtivo, somAtivo]);
+
+  // Presets belong to the account, not to any one exercise — every RestTimer instance (any exercise
+  // visited through the calendar) fetches and shares the exact same list.
+  useEffect(() => {
+    listTimerPresets().then(setPresets);
+  }, []);
+
+  function selectPreset(preset: TimerPreset) {
+    setMinutes(Math.floor(preset.seconds / 60));
+    setSeconds(preset.seconds % 60);
+  }
+
+  async function saveCurrentAsPreset() {
+    const totalSeconds = minutes * 60 + seconds;
+    if (totalSeconds <= 0 || presets.some((p) => p.seconds === totalSeconds)) return;
+    const preset = await createTimerPreset({ id: Crypto.randomUUID(), seconds: totalSeconds });
+    setPresets((prev) => [...prev, preset].sort((a, b) => a.seconds - b.seconds));
+  }
+
+  function confirmDeletePreset(preset: TimerPreset) {
+    Alert.alert('Excluir este timer?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteTimerPreset(preset._id);
+          setPresets((prev) => prev.filter((p) => p._id !== preset._id));
+        },
+      },
+    ]);
+  }
 
   useEffect(() => {
     return () => {
@@ -185,36 +221,57 @@ export function RestTimer() {
       <ThemedText type="smallBold">Timer de descanso</ThemedText>
 
       {remaining === null && !running && !alarming ? (
-        <View style={styles.stepperRow}>
-          <View style={styles.stepperGroup}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Min
-            </ThemedText>
-            <View style={styles.stepper}>
-              <Pressable onPress={() => setMinutes((m) => Math.max(0, m - 1))} style={styles.stepperButton}>
-                <Ionicons name="remove" size={18} color={theme.text} />
-              </Pressable>
-              <ThemedText type="smallBold">{minutes}</ThemedText>
-              <Pressable onPress={() => setMinutes((m) => Math.min(59, m + 1))} style={styles.stepperButton}>
-                <Ionicons name="add" size={18} color={theme.text} />
-              </Pressable>
+        <>
+          <View style={styles.stepperRow}>
+            <View style={styles.stepperGroup}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Min
+              </ThemedText>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => setMinutes((m) => Math.max(0, m - 1))} style={styles.stepperButton}>
+                  <Ionicons name="remove" size={18} color={theme.text} />
+                </Pressable>
+                <ThemedText type="smallBold">{minutes}</ThemedText>
+                <Pressable onPress={() => setMinutes((m) => Math.min(59, m + 1))} style={styles.stepperButton}>
+                  <Ionicons name="add" size={18} color={theme.text} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.stepperGroup}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Seg
+              </ThemedText>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => setSeconds((s) => Math.max(0, s - 15))} style={styles.stepperButton}>
+                  <Ionicons name="remove" size={18} color={theme.text} />
+                </Pressable>
+                <ThemedText type="smallBold">{seconds}</ThemedText>
+                <Pressable onPress={() => setSeconds((s) => Math.min(45, s + 15))} style={styles.stepperButton}>
+                  <Ionicons name="add" size={18} color={theme.text} />
+                </Pressable>
+              </View>
             </View>
           </View>
-          <View style={styles.stepperGroup}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Seg
-            </ThemedText>
-            <View style={styles.stepper}>
-              <Pressable onPress={() => setSeconds((s) => Math.max(0, s - 15))} style={styles.stepperButton}>
-                <Ionicons name="remove" size={18} color={theme.text} />
+
+          <View style={styles.presetRow}>
+            {presets.map((preset) => (
+              <Pressable
+                key={preset._id}
+                onPress={() => selectPreset(preset)}
+                onLongPress={() => confirmDeletePreset(preset)}
+                style={[
+                  styles.presetChip,
+                  { borderColor: theme.border },
+                  minutes * 60 + seconds === preset.seconds && { borderColor: Brand.primary, backgroundColor: 'rgba(21, 181, 128, 0.12)' },
+                ]}>
+                <ThemedText type="small">{formatSeconds(preset.seconds)}</ThemedText>
               </Pressable>
-              <ThemedText type="smallBold">{seconds}</ThemedText>
-              <Pressable onPress={() => setSeconds((s) => Math.min(45, s + 15))} style={styles.stepperButton}>
-                <Ionicons name="add" size={18} color={theme.text} />
-              </Pressable>
-            </View>
+            ))}
+            <Pressable onPress={saveCurrentAsPreset} style={[styles.presetChip, styles.presetAddChip, { borderColor: theme.border }]}>
+              <Ionicons name="add" size={16} color={theme.textSecondary} />
+            </Pressable>
           </View>
-        </View>
+        </>
       ) : (
         <ThemedText style={[styles.countdown, alarming && { color: Brand.accent }]}>
           {alarming ? 'Concluído!' : formatSeconds(displaySeconds)}
@@ -269,6 +326,14 @@ const styles = StyleSheet.create({
   stepperGroup: { alignItems: 'center', gap: Spacing.one },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   stepperButton: { padding: Spacing.one },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Spacing.two },
+  presetChip: {
+    borderWidth: 1,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
+  presetAddChip: { paddingHorizontal: Spacing.two },
   countdown: { fontSize: 40, lineHeight: 52, fontWeight: '700' },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   playButton: {

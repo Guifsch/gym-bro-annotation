@@ -7,6 +7,7 @@ import authRoutes from './routes/auth';
 import categoriasRoutes from './routes/categorias';
 import exerciciosRoutes from './routes/exercicios';
 import sessoesRoutes from './routes/sessoes';
+import timerPresetsRoutes from './routes/timerPresets';
 import treinosRoutes from './routes/treinos';
 import { env } from './utils/env';
 
@@ -27,6 +28,7 @@ export function createApp() {
   app.use('/api/exercicios', exerciciosRoutes);
   app.use('/api/treinos', treinosRoutes);
   app.use('/api/sessoes', sessoesRoutes);
+  app.use('/api/timer-presets', timerPresetsRoutes);
 
   app.use(errorHandler);
 

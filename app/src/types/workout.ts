@@ -58,3 +58,8 @@ export interface DiaTreino {
   treinoNome: string;
   date: string;
 }
+
+export interface TimerPreset {
+  _id: string;
+  seconds: number;
+}

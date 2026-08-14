@@ -26,13 +26,14 @@ export default function RootLayout() {
     SystemUI.setBackgroundColorAsync(Colors[themeName].background);
   }, [themeName]);
 
-  // Keep the native splash up until our own themed content has actually painted at least once —
-  // hiding it as soon as the theme preference loads (the old behavior) left a raw black gap on
-  // screen between the splash disappearing and the first JS frame committing.
+  // Keep the native splash up until the theme preference has loaded — hiding it earlier leaves a raw
+  // black gap on screen before the first JS frame commits. It's hidden for good once auth status
+  // resolves (see (tabs)/_layout.tsx) — not here — since that check itself can take a while (Render
+  // free-tier cold start), and the branded splash is a better "please wait" than any custom screen.
   if (!themeLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }} onLayout={() => SplashScreen.hideAsync()}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />

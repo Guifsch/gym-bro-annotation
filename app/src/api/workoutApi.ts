@@ -1,7 +1,15 @@
 import { File } from 'expo-file-system';
 
 import { getAccessToken } from '@/auth/tokenMemory';
-import type { Categoria, DiaTreino, Exercicio, ExercicioHistoricoEntry, Sessao, Treino } from '@/types/workout';
+import type {
+  Categoria,
+  DiaTreino,
+  Exercicio,
+  ExercicioHistoricoEntry,
+  Sessao,
+  TimerPreset,
+  Treino,
+} from '@/types/workout';
 
 import { API_URL, apiClient } from './apiClient';
 
@@ -158,4 +166,18 @@ export interface UpsertEntryResult {
 export async function upsertSessaoEntry(params: UpsertEntryParams): Promise<UpsertEntryResult> {
   const { data } = await apiClient.put('/api/sessoes/entries', params);
   return data;
+}
+
+export async function listTimerPresets(): Promise<TimerPreset[]> {
+  const { data } = await apiClient.get('/api/timer-presets');
+  return data.presets;
+}
+
+export async function createTimerPreset(params: { id: string; seconds: number }): Promise<TimerPreset> {
+  const { data } = await apiClient.post('/api/timer-presets', params);
+  return data.preset;
+}
+
+export async function deleteTimerPreset(id: string): Promise<void> {
+  await apiClient.delete(`/api/timer-presets/${id}`);
 }
