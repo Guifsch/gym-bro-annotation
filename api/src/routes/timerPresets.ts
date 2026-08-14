@@ -20,12 +20,24 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const { id, seconds } = createTimerPresetSchema.parse(req.body);
-    const preset = await TimerPreset.findOneAndUpdate(
-      { userId: req.user!.id, seconds },
-      { $setOnInsert: { _id: id, userId: req.user!.id, seconds } },
-      { upsert: true, new: true }
-    );
-    res.status(201).json({ preset });
+    try {
+      const preset = await TimerPreset.findOneAndUpdate(
+        { userId: req.user!.id, seconds },
+        { $setOnInsert: { _id: id, userId: req.user!.id, seconds } },
+        { upsert: true, new: true }
+      );
+      res.status(201).json({ preset });
+    } catch (err) {
+      // Two concurrent upserts for the same (userId, seconds) can both pass the "does it exist"
+      // check before either has inserted, and the second then hits the unique index — the first
+      // request already created the row we actually want, so just fetch and return that instead.
+      if ((err as { code?: number }).code === 11000) {
+        const preset = await TimerPreset.findOne({ userId: req.user!.id, seconds });
+        res.status(201).json({ preset });
+        return;
+      }
+      throw err;
+    }
   })
 );
 

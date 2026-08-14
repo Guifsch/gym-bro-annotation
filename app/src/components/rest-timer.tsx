@@ -29,6 +29,7 @@ export function RestTimer() {
   const [minutes, setMinutes] = useState(2);
   const [seconds, setSeconds] = useState(0);
   const [presets, setPresets] = useState<TimerPreset[]>([]);
+  const [savingPreset, setSavingPreset] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -60,10 +61,22 @@ export function RestTimer() {
   }
 
   async function saveCurrentAsPreset() {
+    if (savingPreset) return; // guards against double-taps racing two creates for the same duration
     const totalSeconds = minutes * 60 + seconds;
     if (totalSeconds <= 0 || presets.some((p) => p.seconds === totalSeconds)) return;
-    const preset = await createTimerPreset({ id: Crypto.randomUUID(), seconds: totalSeconds });
-    setPresets((prev) => [...prev, preset].sort((a, b) => a.seconds - b.seconds));
+
+    setSavingPreset(true);
+    try {
+      const preset = await createTimerPreset({ id: Crypto.randomUUID(), seconds: totalSeconds });
+      setPresets((prev) => {
+        // The backend dedupes by (userId, seconds) on its own, but merge defensively by _id here too
+        // in case a stale response for the same duration ever comes back with a different id.
+        const withoutDuplicate = prev.filter((p) => p._id !== preset._id && p.seconds !== preset.seconds);
+        return [...withoutDuplicate, preset].sort((a, b) => a.seconds - b.seconds);
+      });
+    } finally {
+      setSavingPreset(false);
+    }
   }
 
   function confirmDeletePreset(preset: TimerPreset) {
@@ -224,30 +237,34 @@ export function RestTimer() {
         <>
           <View style={styles.stepperRow}>
             <View style={styles.stepperGroup}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Min
-              </ThemedText>
+              <ThemedText themeColor="textSecondary">Min</ThemedText>
               <View style={styles.stepper}>
-                <Pressable onPress={() => setMinutes((m) => Math.max(0, m - 1))} style={styles.stepperButton}>
-                  <Ionicons name="remove" size={18} color={theme.text} />
+                <Pressable
+                  onPress={() => setMinutes((m) => Math.max(0, m - 1))}
+                  style={[styles.stepperButton, { borderColor: theme.border }]}>
+                  <Ionicons name="remove" size={20} color={theme.text} />
                 </Pressable>
-                <ThemedText type="smallBold">{minutes}</ThemedText>
-                <Pressable onPress={() => setMinutes((m) => Math.min(59, m + 1))} style={styles.stepperButton}>
-                  <Ionicons name="add" size={18} color={theme.text} />
+                <ThemedText style={styles.stepperValue}>{minutes}</ThemedText>
+                <Pressable
+                  onPress={() => setMinutes((m) => Math.min(59, m + 1))}
+                  style={[styles.stepperButton, { borderColor: theme.border }]}>
+                  <Ionicons name="add" size={20} color={theme.text} />
                 </Pressable>
               </View>
             </View>
             <View style={styles.stepperGroup}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Seg
-              </ThemedText>
+              <ThemedText themeColor="textSecondary">Seg</ThemedText>
               <View style={styles.stepper}>
-                <Pressable onPress={() => setSeconds((s) => Math.max(0, s - 15))} style={styles.stepperButton}>
-                  <Ionicons name="remove" size={18} color={theme.text} />
+                <Pressable
+                  onPress={() => setSeconds((s) => Math.max(0, s - 15))}
+                  style={[styles.stepperButton, { borderColor: theme.border }]}>
+                  <Ionicons name="remove" size={20} color={theme.text} />
                 </Pressable>
-                <ThemedText type="smallBold">{seconds}</ThemedText>
-                <Pressable onPress={() => setSeconds((s) => Math.min(45, s + 15))} style={styles.stepperButton}>
-                  <Ionicons name="add" size={18} color={theme.text} />
+                <ThemedText style={styles.stepperValue}>{seconds}</ThemedText>
+                <Pressable
+                  onPress={() => setSeconds((s) => Math.min(45, s + 15))}
+                  style={[styles.stepperButton, { borderColor: theme.border }]}>
+                  <Ionicons name="add" size={20} color={theme.text} />
                 </Pressable>
               </View>
             </View>
@@ -255,20 +272,26 @@ export function RestTimer() {
 
           <View style={styles.presetRow}>
             {presets.map((preset) => (
-              <Pressable
-                key={preset._id}
-                onPress={() => selectPreset(preset)}
-                onLongPress={() => confirmDeletePreset(preset)}
-                style={[
-                  styles.presetChip,
-                  { borderColor: theme.border },
-                  minutes * 60 + seconds === preset.seconds && { borderColor: Brand.primary, backgroundColor: 'rgba(21, 181, 128, 0.12)' },
-                ]}>
-                <ThemedText type="small">{formatSeconds(preset.seconds)}</ThemedText>
-              </Pressable>
+              <View key={preset._id} style={styles.presetChipWrap}>
+                <Pressable
+                  onPress={() => selectPreset(preset)}
+                  style={[
+                    styles.presetChip,
+                    { borderColor: theme.border },
+                    minutes * 60 + seconds === preset.seconds && { borderColor: Brand.primary, backgroundColor: 'rgba(21, 181, 128, 0.12)' },
+                  ]}>
+                  <ThemedText>{formatSeconds(preset.seconds)}</ThemedText>
+                </Pressable>
+                <Pressable onPress={() => confirmDeletePreset(preset)} hitSlop={10} style={styles.presetDeleteBadge}>
+                  <Ionicons name="close" size={11} color="#fff" />
+                </Pressable>
+              </View>
             ))}
-            <Pressable onPress={saveCurrentAsPreset} style={[styles.presetChip, styles.presetAddChip, { borderColor: theme.border }]}>
-              <Ionicons name="add" size={16} color={theme.textSecondary} />
+            <Pressable
+              onPress={saveCurrentAsPreset}
+              disabled={savingPreset}
+              style={[styles.presetChip, styles.presetAddChip, { borderColor: theme.border }, savingPreset && styles.playButtonDisabled]}>
+              <Ionicons name="add" size={18} color={theme.textSecondary} />
             </Pressable>
           </View>
         </>
@@ -282,7 +305,7 @@ export function RestTimer() {
         <View style={styles.controlsRow}>
           <GradientButton title="+1 min" onPress={addOneMinute} icon={<Ionicons name="add" size={18} color="#fff" />} />
           <Pressable onPress={stopAlarm} style={[styles.resetButton, { borderColor: theme.border }]}>
-            <Ionicons name="pause" size={18} color={theme.text} />
+            <Ionicons name="pause" size={20} color={theme.text} />
           </Pressable>
         </View>
       ) : (
@@ -291,16 +314,16 @@ export function RestTimer() {
             onPress={running ? handlePause : handlePlay}
             disabled={starting && !running}
             style={[styles.playButton, { backgroundColor: Brand.primary }, starting && !running && styles.playButtonDisabled]}>
-            <Ionicons name={running ? 'pause' : 'play'} size={22} color="#fff" />
+            <Ionicons name={running ? 'pause' : 'play'} size={26} color="#fff" />
           </Pressable>
           {running && (
             <Pressable onPress={addOneMinute} style={[styles.resetButton, { borderColor: theme.border }]}>
-              <Ionicons name="add" size={18} color={theme.text} />
+              <Ionicons name="add" size={20} color={theme.text} />
             </Pressable>
           )}
           {remaining !== null && (
             <Pressable onPress={handleReset} style={[styles.resetButton, { borderColor: theme.border }]}>
-              <Ionicons name="refresh" size={18} color={theme.text} />
+              <Ionicons name="refresh" size={20} color={theme.text} />
             </Pressable>
           )}
         </View>
@@ -308,11 +331,11 @@ export function RestTimer() {
 
       <View style={styles.switchRow}>
         <View style={styles.switchItem}>
-          <ThemedText type="small">Vibrar</ThemedText>
+          <ThemedText>Vibrar</ThemedText>
           <Switch value={vibrarAtivo} onValueChange={setVibrarAtivo} trackColor={{ true: Brand.primary }} />
         </View>
         <View style={styles.switchItem}>
-          <ThemedText type="small">Som</ThemedText>
+          <ThemedText>Som</ThemedText>
           <Switch value={somAtivo} onValueChange={setSomAtivo} trackColor={{ true: Brand.primary }} />
         </View>
       </View>
@@ -321,11 +344,19 @@ export function RestTimer() {
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.three, alignItems: 'center' },
+  container: { gap: Spacing.four, alignItems: 'center' },
   stepperRow: { flexDirection: 'row', gap: Spacing.five },
-  stepperGroup: { alignItems: 'center', gap: Spacing.one },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  stepperButton: { padding: Spacing.one },
+  stepperGroup: { alignItems: 'center', gap: Spacing.two },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: { fontSize: 24, lineHeight: 30, fontWeight: '700', minWidth: 32, textAlign: 'center' },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Spacing.two },
   presetChip: {
     borderWidth: 1,
@@ -334,24 +365,36 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   presetAddChip: { paddingHorizontal: Spacing.two },
-  countdown: { fontSize: 40, lineHeight: 52, fontWeight: '700' },
+  presetChipWrap: { position: 'relative' },
+  presetDeleteBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    width: 20,
+    height: 20,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdown: { fontSize: 46, lineHeight: 58, fontWeight: '700' },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   playButton: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playButtonDisabled: { opacity: 0.5 },
   resetButton: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: Radius.full,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   switchRow: { flexDirection: 'row', gap: Spacing.five },
-  switchItem: { alignItems: 'center', gap: Spacing.one },
+  switchItem: { alignItems: 'center', gap: Spacing.two },
 });
