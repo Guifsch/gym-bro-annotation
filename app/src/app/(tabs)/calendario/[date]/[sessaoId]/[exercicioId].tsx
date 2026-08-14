@@ -21,6 +21,7 @@ import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { LoadingView } from '@/components/loading-view';
 import { PercentualTable } from '@/components/percentual-table';
+import { RestTimer } from '@/components/rest-timer';
 import { showToast } from '@/components/toast';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -194,6 +195,8 @@ export default function ExercicioDetalheScreen() {
             <ThemedText type="smallBold">Fotos do equipamento</ThemedText>
             <ExercicioImageGallery imagens={exercicio.imagens ?? []} onUpload={handleUploadImagem} onDelete={handleDeleteImagem} />
           </Card>
+
+          <RestTimer />
         </ScrollView>
       </SafeAreaView>
 

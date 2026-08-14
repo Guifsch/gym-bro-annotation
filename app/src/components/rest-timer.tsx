@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Switch, Vibration, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { Card } from '@/components/card';
+import { GradientButton } from '@/components/gradient-button';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  cancelTimerAlarm,
+  scheduleTimerAlarm,
+  setTimerAlarmListener,
+  setTimerAlarmPrefs,
+  SNOOZE_SECONDS,
+} from '@/notifications/timerAlarmService';
 
 function formatSeconds(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -20,13 +27,22 @@ export function RestTimer() {
   const [seconds, setSeconds] = useState(30);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [alarming, setAlarming] = useState(false);
   const [vibrarAtivo, setVibrarAtivo] = useState(true);
   const [somAtivo, setSomAtivo] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const notificationIdRef = useRef<string | null>(null);
   // Absolute end timestamp, not a tick counter — JS timers get throttled/paused while the app is
   // backgrounded, so counting down via fixed decrements per tick drifts behind real elapsed time.
   const endTimeRef = useRef<number | null>(null);
+  // Bumped by any Play/Pause/Reset; an in-flight startCountdown checks this after each await and
+  // bails out (cancelling whatever it already scheduled) if it's been superseded by a newer action —
+  // otherwise rapid taps race and leave orphaned notifications scheduled behind the app's back.
+  const generationRef = useRef(0);
+
+  useEffect(() => {
+    setTimerAlarmPrefs(vibrarAtivo, somAtivo);
+  }, [vibrarAtivo, somAtivo]);
 
   useEffect(() => {
     return () => {
@@ -39,70 +55,127 @@ export function RestTimer() {
     intervalRef.current = null;
   }
 
-  const tick = useCallback(() => {
-    if (endTimeRef.current === null) return;
-    const secsLeft = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
-    setRemaining(secsLeft);
-    if (secsLeft <= 0) {
-      stopInterval();
-      setRunning(false);
-      endTimeRef.current = null;
-      notificationIdRef.current = null;
-    }
-    return secsLeft;
-  }, []);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && running) tick();
-    });
-    return () => subscription.remove();
-  }, [running, tick]);
-
-  async function cancelScheduledNotification() {
-    if (notificationIdRef.current) {
-      await Notifications.cancelScheduledNotificationAsync(notificationIdRef.current);
-      notificationIdRef.current = null;
-    }
-  }
-
-  async function handlePlay() {
-    const startFrom = remaining ?? minutes * 60 + seconds;
+  const startCountdown = useCallback(async (startFrom: number) => {
     if (startFrom <= 0) return;
+    const myGeneration = ++generationRef.current;
+    setStarting(true);
 
-    await Notifications.requestPermissionsAsync();
+    await scheduleTimerAlarm(startFrom);
+    if (generationRef.current !== myGeneration) {
+      // A Pause/Reset happened while this was scheduling — cancel what we just scheduled, nothing
+      // else is tracking it.
+      setStarting(false);
+      void cancelTimerAlarm();
+      return;
+    }
 
     endTimeRef.current = Date.now() + startFrom * 1000;
     setRemaining(startFrom);
     setRunning(true);
+    setStarting(false);
+    setAlarming(false);
 
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Descanso finalizado!',
-        sound: somAtivo ? 'default' : undefined,
-      },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: startFrom, repeats: false },
-    });
-    notificationIdRef.current = id;
-
+    stopInterval();
     intervalRef.current = setInterval(() => {
-      const secsLeft = tick();
-      if (secsLeft === 0 && vibrarAtivo) Vibration.vibrate(500);
+      if (endTimeRef.current === null) return;
+      const secsLeft = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+      setRemaining(secsLeft);
+      if (secsLeft <= 0) {
+        stopInterval();
+        setRunning(false);
+        setAlarming(true);
+        endTimeRef.current = null;
+      }
     }, 1000);
-  }
+  }, []);
+
+  const handlePlay = useCallback(() => {
+    void startCountdown(remaining ?? minutes * 60 + seconds);
+  }, [startCountdown, remaining, minutes, seconds]);
+
+  const stopAlarm = useCallback(() => {
+    generationRef.current++; // invalidate an in-flight snooze (+1 min) restart, if any
+    setAlarming(false);
+    setRemaining(null);
+    void cancelTimerAlarm();
+  }, []);
+
+  const addOneMinute = useCallback(() => {
+    if (alarming) {
+      void startCountdown(SNOOZE_SECONDS);
+      return;
+    }
+    if (running && endTimeRef.current !== null) {
+      endTimeRef.current += SNOOZE_SECONDS * 1000;
+      const secsLeft = Math.max(1, Math.round((endTimeRef.current - Date.now()) / 1000));
+      setRemaining(secsLeft);
+      void scheduleTimerAlarm(secsLeft);
+    }
+  }, [alarming, running, startCountdown]);
+
+  // Syncs the on-screen state whenever the alarm notification's own action buttons are used — those
+  // reach this listener whenever the app's JS is alive (foreground, or woken from background), but
+  // not from a fully killed app; the alarm itself (vibration/sound) still stops correctly either way,
+  // since that's handled by the foreground service regardless of whether anything is listening here.
+  useEffect(() => {
+    setTimerAlarmListener((action) => {
+      if (action === 'pause') {
+        setAlarming(false);
+        setRemaining(null);
+        stopInterval();
+        setRunning(false);
+      } else if (action === 'snooze') {
+        endTimeRef.current = Date.now() + SNOOZE_SECONDS * 1000;
+        setRemaining(SNOOZE_SECONDS);
+        setAlarming(false);
+        setRunning(true);
+        stopInterval();
+        intervalRef.current = setInterval(() => {
+          if (endTimeRef.current === null) return;
+          const secsLeft = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          setRemaining(secsLeft);
+          if (secsLeft <= 0) {
+            stopInterval();
+            setRunning(false);
+            setAlarming(true);
+            endTimeRef.current = null;
+          }
+        }, 1000);
+      }
+    });
+    return () => setTimerAlarmListener(null);
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || endTimeRef.current === null || !running) return;
+      const secsLeft = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+      setRemaining(secsLeft);
+      if (secsLeft <= 0) {
+        stopInterval();
+        setRunning(false);
+        setAlarming(true);
+        endTimeRef.current = null;
+      }
+    });
+    return () => subscription.remove();
+  }, [running]);
 
   function handlePause() {
+    generationRef.current++; // invalidate any startCountdown still mid-flight
     stopInterval();
     setRunning(false);
-    void cancelScheduledNotification();
+    void cancelTimerAlarm();
   }
 
   function handleReset() {
+    generationRef.current++;
     stopInterval();
     setRunning(false);
+    setAlarming(false);
     setRemaining(null);
     endTimeRef.current = null;
-    void cancelScheduledNotification();
+    void cancelTimerAlarm();
   }
 
   const displaySeconds = remaining ?? minutes * 60 + seconds;
@@ -111,7 +184,7 @@ export function RestTimer() {
     <Card style={styles.container}>
       <ThemedText type="smallBold">Timer de descanso</ThemedText>
 
-      {remaining === null && !running ? (
+      {remaining === null && !running && !alarming ? (
         <View style={styles.stepperRow}>
           <View style={styles.stepperGroup}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -143,21 +216,38 @@ export function RestTimer() {
           </View>
         </View>
       ) : (
-        <ThemedText style={styles.countdown}>{formatSeconds(displaySeconds)}</ThemedText>
+        <ThemedText style={[styles.countdown, alarming && { color: Brand.accent }]}>
+          {alarming ? 'Concluído!' : formatSeconds(displaySeconds)}
+        </ThemedText>
       )}
 
-      <View style={styles.controlsRow}>
-        <Pressable
-          onPress={running ? handlePause : handlePlay}
-          style={[styles.playButton, { backgroundColor: Brand.primary }]}>
-          <Ionicons name={running ? 'pause' : 'play'} size={22} color="#fff" />
-        </Pressable>
-        {remaining !== null && (
-          <Pressable onPress={handleReset} style={[styles.resetButton, { borderColor: theme.border }]}>
-            <Ionicons name="refresh" size={18} color={theme.text} />
+      {alarming ? (
+        <View style={styles.controlsRow}>
+          <GradientButton title="+1 min" onPress={addOneMinute} icon={<Ionicons name="add" size={18} color="#fff" />} />
+          <Pressable onPress={stopAlarm} style={[styles.resetButton, { borderColor: theme.border }]}>
+            <Ionicons name="pause" size={18} color={theme.text} />
           </Pressable>
-        )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.controlsRow}>
+          <Pressable
+            onPress={running ? handlePause : handlePlay}
+            disabled={starting && !running}
+            style={[styles.playButton, { backgroundColor: Brand.primary }, starting && !running && styles.playButtonDisabled]}>
+            <Ionicons name={running ? 'pause' : 'play'} size={22} color="#fff" />
+          </Pressable>
+          {running && (
+            <Pressable onPress={addOneMinute} style={[styles.resetButton, { borderColor: theme.border }]}>
+              <Ionicons name="add" size={18} color={theme.text} />
+            </Pressable>
+          )}
+          {remaining !== null && (
+            <Pressable onPress={handleReset} style={[styles.resetButton, { borderColor: theme.border }]}>
+              <Ionicons name="refresh" size={18} color={theme.text} />
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <View style={styles.switchRow}>
         <View style={styles.switchItem}>
@@ -188,6 +278,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  playButtonDisabled: { opacity: 0.5 },
   resetButton: {
     width: 44,
     height: 44,

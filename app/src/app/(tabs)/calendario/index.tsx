@@ -6,7 +6,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { listSessaoDatesForMonth } from '@/api/workoutApi';
 import { Card } from '@/components/card';
 import { MonthCalendar } from '@/components/month-calendar';
-import { RestTimer } from '@/components/rest-timer';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -63,7 +62,6 @@ export default function CalendarioScreen() {
               onNextMonth={handleNextMonth}
             />
           </Card>
-          <RestTimer />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
