@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Pressable, StyleSheet, Switch, View } from 'react-native';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import { createTimerPreset, deleteTimerPreset, listTimerPresets } from '@/api/workoutApi';
 import { Card } from '@/components/card';
 import { GradientButton } from '@/components/gradient-button';
@@ -74,6 +75,8 @@ export function RestTimer() {
         const withoutDuplicate = prev.filter((p) => p._id !== preset._id && p.seconds !== preset.seconds);
         return [...withoutDuplicate, preset].sort((a, b) => a.seconds - b.seconds);
       });
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
       setSavingPreset(false);
     }

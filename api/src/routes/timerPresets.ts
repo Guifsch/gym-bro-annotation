@@ -8,6 +8,8 @@ import { createTimerPresetSchema } from '../validation/timerPreset';
 const router = Router();
 router.use(requireAuth);
 
+const MAX_TIMER_PRESETS = 10;
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -20,6 +22,16 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const { id, seconds } = createTimerPresetSchema.parse(req.body);
+
+    const existing = await TimerPreset.findOne({ userId: req.user!.id, seconds });
+    if (!existing) {
+      const count = await TimerPreset.countDocuments({ userId: req.user!.id });
+      if (count >= MAX_TIMER_PRESETS) {
+        res.status(409).json({ error: `Limite de ${MAX_TIMER_PRESETS} timers atingido` });
+        return;
+      }
+    }
+
     try {
       const preset = await TimerPreset.findOneAndUpdate(
         { userId: req.user!.id, seconds },

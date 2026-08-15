@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import {
   createExercicio,
   deleteExercicio,
@@ -154,6 +155,8 @@ export default function ExerciciosListaScreen() {
         setEditingId(created._id);
       }
       showToast('Salvo');
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
       setSaving(false);
     }

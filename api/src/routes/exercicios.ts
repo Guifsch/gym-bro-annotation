@@ -11,6 +11,7 @@ import { createExercicioSchema, updateExercicioSchema } from '../validation/work
 
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_EXERCICIOS = 100;
 
 const router = Router();
 router.use(requireAuth);
@@ -29,6 +30,16 @@ router.post(
     const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg } = createExercicioSchema.parse(
       req.body
     );
+
+    const existing = await Exercicio.findOne({ _id: id, userId: req.user!.id });
+    if (!existing) {
+      const count = await Exercicio.countDocuments({ userId: req.user!.id });
+      if (count >= MAX_EXERCICIOS) {
+        res.status(409).json({ error: `Limite de ${MAX_EXERCICIOS} exercícios atingido` });
+        return;
+      }
+    }
+
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
       { $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg } },

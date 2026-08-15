@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import { createTreino, deleteTreino, listTreinos } from '@/api/workoutApi';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
@@ -47,6 +48,8 @@ export default function TreinosListScreen() {
       const treino = await createTreino({ id: Crypto.randomUUID(), nome });
       setNewNome('');
       router.push(`/(tabs)/treinos/${treino._id}`);
+    } catch (err) {
+      Alert.alert('Não foi possível criar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
       setCreating(false);
     }

@@ -9,6 +9,8 @@ import { createTreinoSchema, updateTreinoSchema } from '../validation/workout';
 const router = Router();
 router.use(requireAuth);
 
+const MAX_TREINOS = 50;
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -21,6 +23,16 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const { id, nome } = createTreinoSchema.parse(req.body);
+
+    const existing = await Treino.findOne({ _id: id, userId: req.user!.id });
+    if (!existing) {
+      const count = await Treino.countDocuments({ userId: req.user!.id });
+      if (count >= MAX_TREINOS) {
+        res.status(409).json({ error: `Limite de ${MAX_TREINOS} treinos atingido` });
+        return;
+      }
+    }
+
     const treino = await Treino.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
       { $setOnInsert: { _id: id, userId: req.user!.id, nome, exercicioIds: [] } },

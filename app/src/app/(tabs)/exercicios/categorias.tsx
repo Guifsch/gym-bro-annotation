@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import { createCategoria, deleteCategoria, listCategorias, updateCategoria } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
@@ -51,6 +52,8 @@ export default function CategoriasScreen() {
       setCategorias((prev) => [...prev, categoria].sort((a, b) => a.nome.localeCompare(b.nome)));
       setNovoNome('');
       showToast('Categoria criada');
+    } catch (err) {
+      Alert.alert('Não foi possível criar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
       setCreating(false);
     }

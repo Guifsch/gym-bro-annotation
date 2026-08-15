@@ -17,10 +17,22 @@ router.get(
   })
 );
 
+const MAX_CATEGORIAS = 50;
+
 router.post(
   '/',
   asyncHandler(async (req, res) => {
     const { id, nome } = createCategoriaSchema.parse(req.body);
+
+    const existing = await Categoria.findOne({ _id: id, userId: req.user!.id });
+    if (!existing) {
+      const count = await Categoria.countDocuments({ userId: req.user!.id });
+      if (count >= MAX_CATEGORIAS) {
+        res.status(409).json({ error: `Limite de ${MAX_CATEGORIAS} categorias atingido` });
+        return;
+      }
+    }
+
     const categoria = await Categoria.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
       { $setOnInsert: { _id: id, userId: req.user!.id, nome } },

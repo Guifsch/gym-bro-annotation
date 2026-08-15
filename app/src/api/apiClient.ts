@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, isAxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 import { clearRefreshToken, getRefreshToken } from '@/auth/secureStore';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/auth/tokenMemory';
@@ -16,6 +16,13 @@ let onSessionExpired: (() => void) | null = null;
 
 export function setOnSessionExpired(callback: () => void): void {
   onSessionExpired = callback;
+}
+
+export function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (isAxiosError(err) && typeof err.response?.data?.error === 'string') {
+    return err.response.data.error;
+  }
+  return fallback;
 }
 
 apiClient.interceptors.request.use((config) => {
