@@ -1,11 +1,8 @@
+import nodemailer, { type Transporter } from 'nodemailer';
+
 import { env } from './env';
 
 async function sendResendEmail(params: { to: string; subject: string; html: string }): Promise<void> {
-  if (!env.resendApiKey) {
-    console.log(`[email:dev-fallback] to=${params.to} subject="${params.subject}"\n${params.html}`);
-    return;
-  }
-
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -26,6 +23,42 @@ async function sendResendEmail(params: { to: string; subject: string; html: stri
   }
 }
 
+let gmailTransporter: Transporter | null = null;
+
+function getGmailTransporter(): Transporter {
+  gmailTransporter ??= nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: env.gmailUser, pass: env.gmailAppPassword },
+  });
+  return gmailTransporter;
+}
+
+async function sendGmailEmail(params: { to: string; subject: string; html: string }): Promise<void> {
+  await getGmailTransporter().sendMail({
+    from: env.gmailUser,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  });
+}
+
+// Resend's sandbox sender (no verified domain) can only deliver to the account owner's own
+// address — Gmail SMTP works for arbitrary recipients today. Switch back to 'resend' once a
+// domain is verified there; EMAIL_PROVIDER picks which implementation actually sends.
+async function sendEmail(params: { to: string; subject: string; html: string }): Promise<void> {
+  const hasCredentials = env.emailProvider === 'gmail' ? env.gmailUser && env.gmailAppPassword : env.resendApiKey;
+  if (!hasCredentials) {
+    console.log(`[email:dev-fallback:${env.emailProvider}] to=${params.to} subject="${params.subject}"\n${params.html}`);
+    return;
+  }
+
+  if (env.emailProvider === 'gmail') {
+    await sendGmailEmail(params);
+  } else {
+    await sendResendEmail(params);
+  }
+}
+
 function codeEmailHtml(heading: string, code: string, footer: string): string {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
@@ -39,7 +72,7 @@ function codeEmailHtml(heading: string, code: string, footer: string): string {
 }
 
 export function sendRegistrationCode(email: string, code: string): Promise<void> {
-  return sendResendEmail({
+  return sendEmail({
     to: email,
     subject: 'Seu código de confirmação — Gym Bro',
     html: codeEmailHtml(
@@ -51,7 +84,7 @@ export function sendRegistrationCode(email: string, code: string): Promise<void>
 }
 
 export function sendPasswordResetCode(email: string, code: string): Promise<void> {
-  return sendResendEmail({
+  return sendEmail({
     to: email,
     subject: 'Recuperação de senha — Gym Bro',
     html: codeEmailHtml(

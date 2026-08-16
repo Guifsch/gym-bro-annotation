@@ -28,6 +28,7 @@ import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
+import { YoutubeVideoField } from '@/components/youtube-video-field';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Categoria, Exercicio } from '@/types/workout';
@@ -48,6 +49,7 @@ export default function ExerciciosListaScreen() {
   const [repsText, setRepsText] = useState('');
   const [pesoText, setPesoText] = useState('');
   const [cargaMaximaText, setCargaMaximaText] = useState('');
+  const [videoUrlText, setVideoUrlText] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -97,6 +99,7 @@ export default function ExerciciosListaScreen() {
     setRepsText('');
     setPesoText('');
     setCargaMaximaText('');
+    setVideoUrlText('');
     setCategoriaId(null);
   }
 
@@ -108,6 +111,7 @@ export default function ExerciciosListaScreen() {
     setRepsText(String(exercicio.reps));
     setPesoText(String(exercicio.pesoKg));
     setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
+    setVideoUrlText(exercicio.videoUrl ?? '');
     setCategoriaId(exercicio.categoriaId);
   }
 
@@ -137,6 +141,7 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
+          videoUrl: videoUrlText.trim(),
         });
         setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
       } else {
@@ -149,6 +154,7 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
+          videoUrl: videoUrlText.trim(),
         });
         setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
         setCreating(false);
@@ -258,6 +264,7 @@ export default function ExerciciosListaScreen() {
                   onUpload={handleUploadImagem}
                   onDelete={handleDeleteImagem}
                 />
+                <YoutubeVideoField value={videoUrlText} onChangeText={setVideoUrlText} />
               </View>
             )}
 

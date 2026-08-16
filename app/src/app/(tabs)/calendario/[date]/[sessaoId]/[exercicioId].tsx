@@ -25,6 +25,7 @@ import { RestTimer } from '@/components/rest-timer';
 import { showToast } from '@/components/toast';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { YoutubeVideoField } from '@/components/youtube-video-field';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
@@ -40,6 +41,7 @@ export default function ExercicioDetalheScreen() {
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [cargaMaximaText, setCargaMaximaText] = useState('');
+  const [videoUrlText, setVideoUrlText] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [historicoVisible, setHistoricoVisible] = useState(false);
@@ -53,6 +55,7 @@ export default function ExercicioDetalheScreen() {
     setNome(exercicioData.nome);
     setDescricao(exercicioData.descricao ?? '');
     setCargaMaximaText(exercicioData.cargaMaximaKg !== undefined ? String(exercicioData.cargaMaximaKg) : '');
+    setVideoUrlText(exercicioData.videoUrl ?? '');
   }, [sessaoId, exercicioId]);
 
   useFocusEffect(
@@ -106,6 +109,15 @@ export default function ExercicioDetalheScreen() {
     const updated = await updateExercicio(exercicio._id, { cargaMaximaKg: parsed });
     setExercicio(updated);
     showToast('Carga máxima atualizada');
+  }
+
+  async function handleSaveVideoUrl() {
+    if (!exercicio) return;
+    const trimmed = videoUrlText.trim();
+    if (trimmed === (exercicio.videoUrl ?? '')) return;
+    const updated = await updateExercicio(exercicio._id, { videoUrl: trimmed });
+    setExercicio(updated);
+    showToast('Vídeo atualizado');
   }
 
   async function handleUploadImagem(uri: string, contentType: string) {
@@ -194,6 +206,7 @@ export default function ExercicioDetalheScreen() {
           <Card style={styles.photoCard}>
             <ThemedText type="smallBold">Fotos do equipamento</ThemedText>
             <ExercicioImageGallery imagens={exercicio.imagens ?? []} onUpload={handleUploadImagem} onDelete={handleDeleteImagem} />
+            <YoutubeVideoField value={videoUrlText} onChangeText={setVideoUrlText} onBlur={handleSaveVideoUrl} />
           </Card>
 
           <RestTimer />

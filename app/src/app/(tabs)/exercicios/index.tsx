@@ -53,6 +53,12 @@ export default function ExerciciosLandingScreen() {
           subtitle="Cadastre e edite seus exercícios"
           onPress={() => router.push('/(tabs)/exercicios/lista')}
         />
+        <LandingOption
+          icon="restaurant-outline"
+          title="Alimentação"
+          subtitle="Organize suas refeições"
+          onPress={() => router.push('/(tabs)/exercicios/alimentacao')}
+        />
       </SafeAreaView>
     </ThemedView>
   );

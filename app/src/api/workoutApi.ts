@@ -6,6 +6,7 @@ import type {
   DiaTreino,
   Exercicio,
   ExercicioHistoricoEntry,
+  Refeicao,
   Sessao,
   TimerPreset,
   Treino,
@@ -46,6 +47,7 @@ export interface CreateExercicioParams {
   reps: number;
   pesoKg: number;
   cargaMaximaKg?: number;
+  videoUrl?: string;
 }
 
 export async function createExercicio(params: CreateExercicioParams): Promise<Exercicio> {
@@ -61,6 +63,7 @@ export interface UpdateExercicioParams {
   reps?: number;
   pesoKg?: number;
   cargaMaximaKg?: number;
+  videoUrl?: string;
 }
 
 export async function updateExercicio(id: string, params: UpdateExercicioParams): Promise<Exercicio> {
@@ -166,6 +169,50 @@ export interface UpsertEntryResult {
 export async function upsertSessaoEntry(params: UpsertEntryParams): Promise<UpsertEntryResult> {
   const { data } = await apiClient.put('/api/sessoes/entries', params);
   return data;
+}
+
+export interface RefeicaoItemParams {
+  id: string;
+  nome: string;
+}
+
+export interface CreateRefeicaoParams {
+  id: string;
+  nome: string;
+  date?: string;
+  itens?: RefeicaoItemParams[];
+  observacoes?: string;
+}
+
+export interface UpdateRefeicaoParams {
+  nome?: string;
+  date?: string | null;
+  itens?: RefeicaoItemParams[];
+  observacoes?: string;
+}
+
+export async function listRefeicoes(): Promise<Refeicao[]> {
+  const { data } = await apiClient.get('/api/refeicoes');
+  return data.refeicoes;
+}
+
+export async function createRefeicao(params: CreateRefeicaoParams): Promise<Refeicao> {
+  const { data } = await apiClient.post('/api/refeicoes', params);
+  return data.refeicao;
+}
+
+export async function getRefeicao(id: string): Promise<Refeicao> {
+  const { data } = await apiClient.get(`/api/refeicoes/${id}`);
+  return data.refeicao;
+}
+
+export async function updateRefeicao(id: string, params: UpdateRefeicaoParams): Promise<Refeicao> {
+  const { data } = await apiClient.patch(`/api/refeicoes/${id}`, params);
+  return data.refeicao;
+}
+
+export async function deleteRefeicao(id: string): Promise<void> {
+  await apiClient.delete(`/api/refeicoes/${id}`);
 }
 
 export async function listTimerPresets(): Promise<TimerPreset[]> {

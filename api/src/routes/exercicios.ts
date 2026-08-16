@@ -27,7 +27,7 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg } = createExercicioSchema.parse(
+    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrl } = createExercicioSchema.parse(
       req.body
     );
 
@@ -42,7 +42,9 @@ router.post(
 
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
-      { $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg } },
+      {
+        $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrl },
+      },
       { upsert: true, new: true }
     );
     res.status(201).json({ exercicio });

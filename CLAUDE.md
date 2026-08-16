@@ -19,6 +19,8 @@ Token de acesso em memória + refresh token no `SecureStore` (expira em 30 dias 
 
 Bootstrap de auth (`(tabs)/_layout.tsx`) mostra `LoadingView` (não branco/preto) enquanto checa `/auth/refresh` — essa checagem pode demorar bastante se o Render estiver hibernando.
 
+**Envio de e-mail (código de cadastro/reset de senha)** — `api/src/utils/email.ts` suporta dois provedores, escolhidos por `EMAIL_PROVIDER` no `.env` (`resend` | `gmail`, default `resend`): Resend (`RESEND_API_KEY`/`RESEND_FROM_EMAIL`) e Gmail SMTP via `nodemailer` (`GMAIL_USER`/`GMAIL_APP_PASSWORD` — App Password de 16 caracteres, exige 2FA na conta Google, não é a senha normal). **Por quê dois**: o sender sandbox do Resend (`onboarding@resend.dev`, sem domínio verificado) só entrega pro e-mail do próprio dono da conta — não serve pra registrar usuários reais ainda. Gmail funciona pra qualquer destinatário desde já; trocar de volta pra `resend` quando tiver domínio verificado lá. Fallback de dev (log no console) ativa se as credenciais do provedor escolhido estiverem vazias.
+
 ---
 
 ## Categorias, Exercícios, Treinos
@@ -31,9 +33,22 @@ CRUD padrão nas 3 entidades, todas com **confirmação antes de excluir** (`Ale
 - **Sets/reps aceitam 0** (`min(0)` no Zod e no Mongoose); categoria é obrigatória mas não trava o botão — mostra `Alert` explícito se tentar salvar sem escolher.
 - **Ao salvar, não colapsa de volta pro botão**: editar continua editando; **criar** transiciona automaticamente pro modo editar do exercício recém-criado (permite já adicionar foto/ver histórico sem sair da tela).
 - **Carga máxima (1RM)** — campo opcional `cargaMaximaKg`; quando preenchido, mostra `PercentualTable` (50–100% da carga, calculado no cliente).
-- **Até 5 fotos por exercício** — `Exercicio.imagens: { url, key }[]` (migrado de `imagemUrl`/`imagemKey` singulares via script one-off, já removidos do schema). `ExercicioImageGallery` component: grade de miniaturas + modal de zoom, botão de adicionar (câmera) some com 5 fotos. Endpoints `POST/DELETE /api/exercicios/:id/imagens[/:key]`. Excluir imagem do exercício **já exclui do R2** também (`deleteImageFromR2`).
+- **Até 5 fotos por exercício** — `Exercicio.imagens: { url, key }[]` (migrado de `imagemUrl`/`imagemKey` singulares via script one-off, já removidos do schema). `ExercicioImageGallery` component: grade de miniaturas + modal de zoom, botão de adicionar (câmera **ou** galeria — `Alert.alert` com as duas opções, `expo-image-picker` cobre as duas) some com 5 fotos. Endpoints `POST/DELETE /api/exercicios/:id/imagens[/:key]`. Excluir imagem do exercício **já exclui do R2** também (`deleteImageFromR2`).
+- **Vídeo do YouTube (opcional)** — `Exercicio.videoUrl` (string livre, limite 500 igual à `descricao`), campo `YoutubeVideoField` renderizado logo abaixo da galeria (tanto em `exercicios/lista.tsx` quanto na tela de exercício-dentro-de-sessão do calendário). Extrai o ID via regex (`utils/youtube.ts`, cobre `watch?v=`, `youtu.be/`, `/shorts/`); mostra thumbnail com botão de play (toca inline) **e** ícone de abrir externo (YouTube app/navegador) — usuário escolhe. Toque inline usa `react-native-youtube-iframe` (não WebView cru com HTML/iframe manual — isso batia em erros do player do YouTube tipo "Error 153"/"vídeo indisponível" por falta de origem/sessão válidas; a lib carrega a API oficial do player corretamente). Se o vídeo específico não permitir embed, `onError` mostra um `Alert` sugerindo abrir externo em vez de travar.
 - **Histórico de edições** — cada `PATCH` bem-sucedido salva um snapshot (nome/descrição/sets/reps/peso + `alteradoEm`) em `Exercicio.historico[]` **antes** de aplicar a mudança (limite 50 via `$slice: -50`). Cada entrada tem `_id` próprio (`randomUUID()`) — permite excluir individualmente. **Não vem na listagem geral** (`GET /` usa `.select('-historico')`), só via `GET /:id/historico` (lazy, sob demanda). Exibido pelo componente compartilhado `ExercicioHistoricoModal` (usado tanto em `exercicios/lista.tsx` quanto na tela de exercício-dentro-de-sessão do calendário — não duplicar essa lógica).
 - **Data do histórico em BRT manual**: `formatDateTimeDisplay` calcula UTC-3 manualmente (não usa `Intl`/fuso do aparelho) — evita mostrar hora americana se o timezone do dispositivo estiver errado.
+
+---
+
+## Alimentação (`Refeicao`)
+
+Terceira opção na landing da tab Exercícios (`exercicios/index.tsx`), abaixo do card "Exercícios" — leva pra `exercicios/alimentacao/*`, uma área própria (lista + editor) desacoplada de treino/exercício.
+
+- **Modelo simples e livre**: `Refeicao` tem `nome`, `date?` (YYYY-MM-DD, opcional), `itens: { _id, nome }[]` (linhas de texto livre, ex: "2 ovos mexidos"), `observacoes?`. Sem contagem de calorias/macros — é só uma lista organizável, por design (usuário não tinha um formato em mente, optei pelo mais flexível).
+- **Sem limite de criação** (diferente de categorias/exercícios/treinos/timers): refeições são um log de uso (mais parecido com `Sessao`, que também não tem limite) e não um catálogo/definição — a natureza é acumular ao longo do tempo, um limite baixo inviabilizaria o uso real.
+- **Vínculo com o calendário é opcional e bidirecional**: `alimentacao/[refeicaoId].tsx` deixa escolher o dia via `DatePickerModal` (reaproveita o `MonthCalendar` existente num modal, sem lib de date-picker nativa nova). `calendario/[date]/index.tsx` também mostra as refeições vinculadas àquele dia (filtro client-side sobre `listRefeicoes()`, sem endpoint de filtro por data no backend) e permite criar uma nova já com a data preenchida.
+- **Itens da refeição**: array editado inteiro a cada mudança (`PATCH` manda a lista completa) — sem endpoint dedicado de add/remove item, mesmo padrão simples usado pra `exercicioIds` do Treino.
+- **Limites de caracteres**: `nome` da refeição 120 (padrão igual a outros campos "nome"), item 200, `observacoes` 500 (padrão igual a `descricao`).
 
 ---
 

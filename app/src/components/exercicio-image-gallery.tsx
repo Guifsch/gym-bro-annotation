@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,11 +21,25 @@ export function ExercicioImageGallery({ imagens, onUpload, onDelete }: Exercicio
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [zoomUrl, setZoomUrl] = useState<string | null>(null);
 
-  async function handleAddPhoto() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+  function handleAddPhoto() {
+    Alert.alert('Adicionar foto', undefined, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Câmera', onPress: () => pickImage('camera') },
+      { text: 'Galeria', onPress: () => pickImage('library') },
+    ]);
+  }
+
+  async function pickImage(source: 'camera' | 'library') {
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
 
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 });
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
     const asset = result.assets?.[0];
     if (result.canceled || !asset) return;
 
@@ -74,7 +88,7 @@ export function ExercicioImageGallery({ imagens, onUpload, onDelete }: Exercicio
           {uploading ? (
             <ActivityIndicator color={theme.textSecondary} />
           ) : (
-            <Ionicons name="camera-outline" size={26} color={theme.textSecondary} />
+            <Ionicons name="images-outline" size={26} color={theme.textSecondary} />
           )}
         </Pressable>
       )}

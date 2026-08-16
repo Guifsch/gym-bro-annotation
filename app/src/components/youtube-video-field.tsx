@@ -1,0 +1,133 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { Alert, Image, Linking, Pressable, StyleSheet, View, type LayoutChangeEvent, type TextInputProps } from 'react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
+
+import { LabeledTextField } from '@/components/labeled-text-field';
+import { ThemedText } from '@/components/themed-text';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { getYoutubeThumbnailUrl, getYoutubeVideoId, getYoutubeWatchUrl } from '@/utils/youtube';
+
+const VIDEO_URL_MAX_LENGTH = 500;
+
+interface YoutubeVideoFieldProps {
+  value: string;
+  onChangeText: (text: string) => void;
+  onBlur?: TextInputProps['onBlur'];
+}
+
+export function YoutubeVideoField({ value, onChangeText, onBlur }: YoutubeVideoFieldProps) {
+  const theme = useTheme();
+  const [playingInline, setPlayingInline] = useState(false);
+  const [playerWidth, setPlayerWidth] = useState(0);
+  const videoId = getYoutubeVideoId(value);
+
+  function openExternally() {
+    Linking.openURL(videoId ? getYoutubeWatchUrl(videoId) : value.trim());
+  }
+
+  function handlePlayerLayout(event: LayoutChangeEvent) {
+    setPlayerWidth(event.nativeEvent.layout.width);
+  }
+
+  function handlePlayerError() {
+    setPlayingInline(false);
+    Alert.alert(
+      'Não foi possível tocar aqui',
+      'Esse vídeo não permite reprodução dentro do app. Toque no ícone de abrir pra assistir no YouTube.'
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <LabeledTextField
+        label="Vídeo (link do YouTube, opcional)"
+        value={value}
+        onChangeText={(text) => {
+          setPlayingInline(false);
+          onChangeText(text);
+        }}
+        onBlur={onBlur}
+        maxLength={VIDEO_URL_MAX_LENGTH}
+        keyboardType="url"
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="https://youtube.com/watch?v=..."
+      />
+
+      {videoId && playingInline && (
+        <View style={styles.playerWrap} onLayout={handlePlayerLayout}>
+          {playerWidth > 0 && (
+            <YoutubePlayer
+              height={playerWidth * (9 / 16)}
+              width={playerWidth}
+              videoId={videoId}
+              play
+              onError={handlePlayerError}
+            />
+          )}
+          <Pressable onPress={() => setPlayingInline(false)} style={styles.closePlayerButton} hitSlop={8}>
+            <Ionicons name="close" size={16} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+
+      {videoId && !playingInline && (
+        <Pressable onPress={() => setPlayingInline(true)} style={styles.thumbWrap}>
+          <Image source={{ uri: getYoutubeThumbnailUrl(videoId) }} style={styles.thumb} resizeMode="cover" />
+          <View style={styles.playOverlay}>
+            <Ionicons name="play" size={28} color="#fff" />
+          </View>
+          <Pressable onPress={openExternally} style={styles.externalBadge} hitSlop={8}>
+            <Ionicons name="open-outline" size={16} color="#fff" />
+          </Pressable>
+        </Pressable>
+      )}
+
+      {!videoId && value.trim().length > 0 && (
+        <Pressable onPress={openExternally} style={styles.linkRow}>
+          <Ionicons name="link-outline" size={16} color={theme.textSecondary} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Abrir link
+          </ThemedText>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { gap: Spacing.two },
+  thumbWrap: { position: 'relative', borderRadius: Radius.md, overflow: 'hidden' },
+  thumb: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  externalBadge: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: Radius.full,
+    padding: 6,
+  },
+  playerWrap: { position: 'relative', borderRadius: Radius.md, overflow: 'hidden' },
+  closePlayerButton: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: Radius.full,
+    padding: 6,
+    zIndex: 1,
+  },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+});

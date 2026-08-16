@@ -3,6 +3,7 @@ import { z } from 'zod';
 const uuid = z.string().uuid();
 const nome = z.string().trim().min(1).max(120);
 const descricao = z.string().trim().max(500).optional();
+const videoUrl = z.string().trim().max(500).optional();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
 export const createCategoriaSchema = z.object({
@@ -23,6 +24,7 @@ export const createExercicioSchema = z.object({
   reps: z.number().int().min(0).max(500),
   pesoKg: z.number().min(0).max(1000),
   cargaMaximaKg: z.number().min(0).max(2000).optional(),
+  videoUrl,
 });
 
 export const updateExercicioSchema = z.object({
@@ -33,6 +35,7 @@ export const updateExercicioSchema = z.object({
   reps: z.number().int().min(0).max(500).optional(),
   pesoKg: z.number().min(0).max(1000).optional(),
   cargaMaximaKg: z.number().min(0).max(2000).optional(),
+  videoUrl,
 });
 
 export const createTreinoSchema = z.object({

@@ -6,6 +6,7 @@ export default function ExerciciosLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="categorias" />
       <Stack.Screen name="lista" />
+      <Stack.Screen name="alimentacao" />
     </Stack>
   );
 }

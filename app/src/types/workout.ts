@@ -17,6 +17,7 @@ export interface Exercicio {
   reps: number;
   pesoKg: number;
   cargaMaximaKg?: number;
+  videoUrl?: string;
   imagens: ExercicioImagem[];
 }
 
@@ -62,4 +63,17 @@ export interface DiaTreino {
 export interface TimerPreset {
   _id: string;
   seconds: number;
+}
+
+export interface RefeicaoItem {
+  _id: string;
+  nome: string;
+}
+
+export interface Refeicao {
+  _id: string;
+  nome: string;
+  date?: string;
+  itens: RefeicaoItem[];
+  observacoes?: string;
 }

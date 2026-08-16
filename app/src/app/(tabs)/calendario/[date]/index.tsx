@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { deleteSessao, listSessoesForDay, listTreinos, logTreinoForDay } from '@/api/workoutApi';
+import { createRefeicao, deleteSessao, listRefeicoes, listSessoesForDay, listTreinos, logTreinoForDay } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
@@ -14,7 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { DiaTreino, Treino } from '@/types/workout';
+import type { DiaTreino, Refeicao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
 
 export default function CalendarioDiaScreen() {
@@ -22,13 +23,20 @@ export default function CalendarioDiaScreen() {
   const theme = useTheme();
   const [sessoes, setSessoes] = useState<DiaTreino[]>([]);
   const [treinos, setTreinos] = useState<Treino[]>([]);
+  const [refeicoes, setRefeicoes] = useState<Refeicao[]>([]);
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState<string | null>(null);
+  const [addingRefeicao, setAddingRefeicao] = useState(false);
 
   const load = useCallback(async () => {
-    const [sessoesData, treinosData] = await Promise.all([listSessoesForDay(date), listTreinos()]);
+    const [sessoesData, treinosData, refeicoesData] = await Promise.all([
+      listSessoesForDay(date),
+      listTreinos(),
+      listRefeicoes(),
+    ]);
     setSessoes(sessoesData);
     setTreinos(treinosData);
+    setRefeicoes(refeicoesData.filter((r) => r.date === date));
   }, [date]);
 
   useFocusEffect(
@@ -57,6 +65,16 @@ export default function CalendarioDiaScreen() {
       }
     } finally {
       setLogging(null);
+    }
+  }
+
+  async function handleAddRefeicao() {
+    setAddingRefeicao(true);
+    try {
+      const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome: 'Nova refeição', date });
+      router.push(`/(tabs)/exercicios/alimentacao/${refeicao._id}`);
+    } finally {
+      setAddingRefeicao(false);
     }
   }
 
@@ -119,6 +137,32 @@ export default function CalendarioDiaScreen() {
               })}
             </View>
           )}
+
+          <View style={styles.sectionHeaderRow}>
+            <ThemedText type="smallBold">Refeições</ThemedText>
+            <Pressable onPress={handleAddRefeicao} disabled={addingRefeicao} hitSlop={8} style={styles.addRefeicaoButton}>
+              <Ionicons name="add-circle-outline" size={20} color={Brand.primary} />
+            </Pressable>
+          </View>
+          {refeicoes.length === 0 ? (
+            <EmptyState icon="restaurant-outline" title="Nenhuma refeição vinculada a este dia ainda." />
+          ) : (
+            <View style={styles.list}>
+              {refeicoes.map((refeicao) => (
+                <Pressable key={refeicao._id} onPress={() => router.push(`/(tabs)/exercicios/alimentacao/${refeicao._id}`)}>
+                  <Card style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="smallBold">{refeicao.nome}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {refeicao.itens.length === 1 ? '1 item' : `${refeicao.itens.length} itens`}
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={Brand.primary} />
+                  </Card>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -129,6 +173,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  addRefeicaoButton: { padding: Spacing.one },
   tileWrap: { gap: Spacing.two },
   tile: {
     flexDirection: 'row',
