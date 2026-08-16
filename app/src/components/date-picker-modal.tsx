@@ -2,29 +2,30 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet } from 'react-native';
 
 import { Card } from '@/components/card';
+import { GradientButton } from '@/components/gradient-button';
 import { MonthCalendar } from '@/components/month-calendar';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 
 interface DatePickerModalProps {
   visible: boolean;
-  selectedDate?: string;
-  onSelect: (date: string) => void;
-  onClear?: () => void;
+  selectedDates: string[];
+  onToggleDate: (date: string) => void;
   onClose: () => void;
 }
 
-function parseYearMonth(date?: string): { year: number; month: number } {
-  if (date) {
-    const [year, month] = date.split('-').map(Number);
+function parseYearMonth(dates: string[]): { year: number; month: number } {
+  const reference = dates[0];
+  if (reference) {
+    const [year, month] = reference.split('-').map(Number);
     return { year, month };
   }
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-export function DatePickerModal({ visible, selectedDate, onSelect, onClear, onClose }: DatePickerModalProps) {
-  const [{ year, month }, setYearMonth] = useState(() => parseYearMonth(selectedDate));
+export function DatePickerModal({ visible, selectedDates, onToggleDate, onClose }: DatePickerModalProps) {
+  const [{ year, month }, setYearMonth] = useState(() => parseYearMonth(selectedDates));
 
   function handlePrevMonth() {
     setYearMonth((prev) =>
@@ -41,31 +42,20 @@ export function DatePickerModal({ visible, selectedDate, onSelect, onClear, onCl
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable onStartShouldSetResponder={() => true}>
+        <Pressable style={styles.cardWrap} onStartShouldSetResponder={() => true}>
           <Card style={styles.card}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Toque nos dias para vincular ou desvincular. Pode escolher vários.
+            </ThemedText>
             <MonthCalendar
               year={year}
               month={month}
-              markedDates={selectedDate ? new Set([selectedDate]) : new Set()}
-              onSelectDate={(date) => {
-                onSelect(date);
-                onClose();
-              }}
+              markedDates={new Set(selectedDates)}
+              onSelectDate={onToggleDate}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
             />
-            {selectedDate && onClear && (
-              <Pressable
-                onPress={() => {
-                  onClear();
-                  onClose();
-                }}
-                style={styles.clearButton}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Remover data
-                </ThemedText>
-              </Pressable>
-            )}
+            <GradientButton title="Concluir" onPress={onClose} />
           </Card>
         </Pressable>
       </Pressable>
@@ -81,6 +71,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.four,
   },
-  card: { width: '100%', gap: Spacing.two },
-  clearButton: { alignItems: 'center', paddingVertical: Spacing.two },
+  cardWrap: { width: '100%' },
+  card: { gap: Spacing.two },
 });

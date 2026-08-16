@@ -8,6 +8,31 @@ import { createRefeicaoSchema, updateRefeicaoSchema } from '../validation/refeic
 const router = Router();
 router.use(requireAuth);
 
+interface ItemInput {
+  id: string;
+  nome: string;
+}
+
+interface BlocoInput {
+  id: string;
+  nome: string;
+  horario?: string;
+  itens?: ItemInput[];
+}
+
+function mapItens(itens: ItemInput[]) {
+  return itens.map((item) => ({ _id: item.id, nome: item.nome }));
+}
+
+function mapBlocos(blocos: BlocoInput[]) {
+  return blocos.map((bloco) => ({
+    _id: bloco.id,
+    nome: bloco.nome,
+    horario: bloco.horario,
+    itens: mapItens(bloco.itens ?? []),
+  }));
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -19,7 +44,7 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome, date, itens, observacoes } = createRefeicaoSchema.parse(req.body);
+    const { id, nome, dates, itens, blocos, observacoes } = createRefeicaoSchema.parse(req.body);
 
     const refeicao = await Refeicao.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
@@ -28,8 +53,9 @@ router.post(
           _id: id,
           userId: req.user!.id,
           nome,
-          date,
-          itens: (itens ?? []).map((item) => ({ _id: item.id, nome: item.nome })),
+          dates: dates ?? [],
+          itens: mapItens(itens ?? []),
+          blocos: mapBlocos(blocos ?? []),
           observacoes,
         },
       },
@@ -55,11 +81,17 @@ router.patch(
   '/:id',
   asyncHandler(async (req, res) => {
     const body = updateRefeicaoSchema.parse(req.body);
-    const { itens, ...rest } = body;
+    const { itens, blocos, ...rest } = body;
 
     const refeicao = await Refeicao.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
-      { $set: { ...rest, ...(itens ? { itens: itens.map((item) => ({ _id: item.id, nome: item.nome })) } : {}) } },
+      {
+        $set: {
+          ...rest,
+          ...(itens ? { itens: mapItens(itens) } : {}),
+          ...(blocos ? { blocos: mapBlocos(blocos) } : {}),
+        },
+      },
       { new: true }
     );
     if (!refeicao) {

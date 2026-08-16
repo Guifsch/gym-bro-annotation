@@ -8,17 +8,26 @@ const refeicaoItem = z.object({
   nome: z.string().trim().min(1).max(200),
 });
 
+const refeicaoBloco = z.object({
+  id: uuid,
+  nome: z.string().trim().min(1).max(120),
+  horario: z.string().trim().max(20).optional(),
+  itens: z.array(refeicaoItem).max(30).optional(),
+});
+
 export const createRefeicaoSchema = z.object({
   id: uuid,
   nome: z.string().trim().min(1).max(120),
-  date: dateString.optional(),
+  dates: z.array(dateString).max(60).optional(),
   itens: z.array(refeicaoItem).max(30).optional(),
+  blocos: z.array(refeicaoBloco).max(20).optional(),
   observacoes: z.string().trim().max(500).optional(),
 });
 
 export const updateRefeicaoSchema = z.object({
   nome: z.string().trim().min(1).max(120).optional(),
-  date: dateString.nullable().optional(),
+  dates: z.array(dateString).max(60).optional(),
   itens: z.array(refeicaoItem).max(30).optional(),
+  blocos: z.array(refeicaoBloco).max(20).optional(),
   observacoes: z.string().trim().max(500).optional(),
 });

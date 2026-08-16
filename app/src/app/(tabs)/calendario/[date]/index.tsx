@@ -17,6 +17,7 @@ import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { DiaTreino, Refeicao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
+import { countRefeicaoItens } from '@/utils/refeicao';
 
 export default function CalendarioDiaScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
@@ -36,7 +37,7 @@ export default function CalendarioDiaScreen() {
     ]);
     setSessoes(sessoesData);
     setTreinos(treinosData);
-    setRefeicoes(refeicoesData.filter((r) => r.date === date));
+    setRefeicoes(refeicoesData.filter((r) => r.dates.includes(date)));
   }, [date]);
 
   useFocusEffect(
@@ -71,7 +72,7 @@ export default function CalendarioDiaScreen() {
   async function handleAddRefeicao() {
     setAddingRefeicao(true);
     try {
-      const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome: 'Nova refeição', date });
+      const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome: 'Nova refeição', dates: [date] });
       router.push(`/(tabs)/exercicios/alimentacao/${refeicao._id}`);
     } finally {
       setAddingRefeicao(false);
@@ -154,7 +155,7 @@ export default function CalendarioDiaScreen() {
                     <View style={{ flex: 1 }}>
                       <ThemedText type="smallBold">{refeicao.nome}</ThemedText>
                       <ThemedText type="small" themeColor="textSecondary">
-                        {refeicao.itens.length === 1 ? '1 item' : `${refeicao.itens.length} itens`}
+                        {countRefeicaoItens(refeicao) === 1 ? '1 item' : `${countRefeicaoItens(refeicao)} itens`}
                       </ThemedText>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={Brand.primary} />

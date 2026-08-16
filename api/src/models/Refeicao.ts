@@ -8,16 +8,27 @@ const refeicaoItemSchema = new Schema(
   { _id: false }
 );
 
+const refeicaoBlocoSchema = new Schema(
+  {
+    _id: { type: String, required: true },
+    nome: { type: String, required: true, trim: true, maxlength: 120 },
+    horario: { type: String, trim: true, maxlength: 20 },
+    itens: { type: [refeicaoItemSchema], default: [] },
+  },
+  { _id: false }
+);
+
 const refeicaoSchema = new Schema({
   _id: { type: String },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   nome: { type: String, required: true, trim: true, maxlength: 120 },
-  date: { type: String },
+  dates: { type: [String], default: [] },
   itens: { type: [refeicaoItemSchema], default: [] },
+  blocos: { type: [refeicaoBlocoSchema], default: [] },
   observacoes: { type: String, trim: true, maxlength: 500 },
   createdAt: { type: Date, default: Date.now },
 });
 
-refeicaoSchema.index({ userId: 1, date: 1 });
+refeicaoSchema.index({ userId: 1, dates: 1 });
 
 export const Refeicao = model('Refeicao', refeicaoSchema);

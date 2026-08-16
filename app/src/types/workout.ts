@@ -70,10 +70,18 @@ export interface RefeicaoItem {
   nome: string;
 }
 
+export interface RefeicaoBloco {
+  _id: string;
+  nome: string;
+  horario?: string;
+  itens: RefeicaoItem[];
+}
+
 export interface Refeicao {
   _id: string;
   nome: string;
-  date?: string;
+  dates: string[];
   itens: RefeicaoItem[];
+  blocos: RefeicaoBloco[];
   observacoes?: string;
 }

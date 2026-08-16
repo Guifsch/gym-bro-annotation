@@ -18,7 +18,7 @@ import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Spacing } from '@/constants/theme';
 import type { Refeicao } from '@/types/workout';
-import { formatDateDisplay } from '@/utils/date';
+import { countRefeicaoItens, formatRefeicaoDates } from '@/utils/refeicao';
 
 export default function AlimentacaoListScreen() {
   const [refeicoes, setRefeicoes] = useState<Refeicao[]>([]);
@@ -103,8 +103,8 @@ export default function AlimentacaoListScreen() {
                       <View style={{ flex: 1 }}>
                         <ThemedText type="smallBold">{item.nome}</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
-                          {item.date ? formatDateDisplay(item.date) : 'Sem data'} ·{' '}
-                          {item.itens.length === 1 ? '1 item' : `${item.itens.length} itens`}
+                          {formatRefeicaoDates(item.dates)} ·{' '}
+                          {countRefeicaoItens(item) === 1 ? '1 item' : `${countRefeicaoItens(item)} itens`}
                         </ThemedText>
                       </View>
                       <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>

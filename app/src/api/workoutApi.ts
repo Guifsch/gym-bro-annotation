@@ -176,18 +176,27 @@ export interface RefeicaoItemParams {
   nome: string;
 }
 
+export interface RefeicaoBlocoParams {
+  id: string;
+  nome: string;
+  horario?: string;
+  itens?: RefeicaoItemParams[];
+}
+
 export interface CreateRefeicaoParams {
   id: string;
   nome: string;
-  date?: string;
+  dates?: string[];
   itens?: RefeicaoItemParams[];
+  blocos?: RefeicaoBlocoParams[];
   observacoes?: string;
 }
 
 export interface UpdateRefeicaoParams {
   nome?: string;
-  date?: string | null;
+  dates?: string[];
   itens?: RefeicaoItemParams[];
+  blocos?: RefeicaoBlocoParams[];
   observacoes?: string;
 }
 
