@@ -19,7 +19,7 @@ export default function Index() {
   }
 
   if (status === 'authenticated') {
-    return <Redirect href="/(tabs)/treinos" />;
+    return <Redirect href="/(tabs)/calendario" />;
   }
 
   return <Redirect href="/(auth)/login" />;

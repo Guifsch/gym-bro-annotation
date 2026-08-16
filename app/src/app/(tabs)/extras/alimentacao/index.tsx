@@ -6,21 +6,22 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
-import { createTreino, deleteTreino, listTreinos } from '@/api/workoutApi';
+import { createRefeicao, deleteRefeicao, listRefeicoes } from '@/api/workoutApi';
+import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { SwipeableRow } from '@/components/swipeable-row';
-import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Spacing } from '@/constants/theme';
-import type { Treino } from '@/types/workout';
+import type { Refeicao } from '@/types/workout';
+import { countRefeicaoItens, formatRefeicaoDates } from '@/utils/refeicao';
 
-export default function TreinosListScreen() {
-  const [treinos, setTreinos] = useState<Treino[]>([]);
+export default function AlimentacaoListScreen() {
+  const [refeicoes, setRefeicoes] = useState<Refeicao[]>([]);
   const [loading, setLoading] = useState(true);
   const [newNome, setNewNome] = useState('');
   const [creating, setCreating] = useState(false);
@@ -28,7 +29,7 @@ export default function TreinosListScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setTreinos(await listTreinos());
+      setRefeicoes(await listRefeicoes());
     } finally {
       setLoading(false);
     }
@@ -45,9 +46,9 @@ export default function TreinosListScreen() {
     if (!nome) return;
     setCreating(true);
     try {
-      const treino = await createTreino({ id: Crypto.randomUUID(), nome });
+      const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome });
       setNewNome('');
-      router.push(`/(tabs)/treinos/${treino._id}`);
+      router.push(`/(tabs)/extras/alimentacao/${refeicao._id}`);
     } catch (err) {
       Alert.alert('Não foi possível criar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
@@ -55,27 +56,27 @@ export default function TreinosListScreen() {
     }
   }
 
-  async function performDelete(treino: Treino) {
+  async function performDelete(refeicao: Refeicao) {
     try {
-      await deleteTreino(treino._id);
-      setTreinos((prev) => prev.filter((t) => t._id !== treino._id));
-      showToast('Excluído');
+      await deleteRefeicao(refeicao._id);
+      setRefeicoes((prev) => prev.filter((r) => r._id !== refeicao._id));
+      showToast('Excluída');
     } catch {
       Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
     }
   }
 
-  function handleDelete(treino: Treino) {
-    Alert.alert('Excluir treino?', 'Essa ação não pode ser desfeita.', [
+  function handleDelete(refeicao: Refeicao) {
+    Alert.alert('Excluir refeição?', 'Essa ação não pode ser desfeita.', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: () => performDelete(treino) },
+      { text: 'Excluir', style: 'destructive', onPress: () => performDelete(refeicao) },
     ]);
   }
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <TabHeader title="Treinos" />
+        <BackHeader title="Alimentação" />
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -83,26 +84,28 @@ export default function TreinosListScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
           <Card style={styles.formCard}>
             <LabeledTextField
-              placeholder="Nome do novo treino"
+              placeholder="Nome da refeição (ex: Plano de terça, Refeição A)"
               value={newNome}
               onChangeText={setNewNome}
               maxLength={120}
+              style={styles.nomeInput}
             />
-            <GradientButton title="Criar treino" onPress={handleCreate} loading={creating} disabled={!newNome.trim()} />
+            <GradientButton title="Nova refeição" onPress={handleCreate} loading={creating} disabled={!newNome.trim()} />
           </Card>
 
-          {!loading && treinos.length === 0 ? (
-            <EmptyState icon="list-outline" title="Nenhum treino ainda. Crie o primeiro acima." />
+          {!loading && refeicoes.length === 0 ? (
+            <EmptyState icon="restaurant-outline" title="Nenhuma refeição ainda. Crie a primeira acima." />
           ) : (
             <View style={styles.list}>
-              {treinos.map((item) => (
+              {refeicoes.map((item) => (
                 <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                  <Pressable onPress={() => router.push(`/(tabs)/treinos/${item._id}`)}>
+                  <Pressable onPress={() => router.push(`/(tabs)/extras/alimentacao/${item._id}`)}>
                     <Card style={styles.row}>
                       <View style={{ flex: 1 }}>
                         <ThemedText type="smallBold">{item.nome}</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
-                          {item.exercicioIds.length} {item.exercicioIds.length === 1 ? 'exercício' : 'exercícios'}
+                          {formatRefeicaoDates(item.dates)} ·{' '}
+                          {countRefeicaoItens(item) === 1 ? '1 item' : `${countRefeicaoItens(item)} itens`}
                         </ThemedText>
                       </View>
                       <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
@@ -126,6 +129,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   formCard: { gap: Spacing.two },
+  nomeInput: { paddingVertical: Spacing.three },
   list: { gap: Spacing.two },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   deleteButton: { padding: Spacing.one },

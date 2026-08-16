@@ -81,7 +81,6 @@ export interface Refeicao {
   _id: string;
   nome: string;
   dates: string[];
-  itens: RefeicaoItem[];
   blocos: RefeicaoBloco[];
   observacoes?: string;
 }

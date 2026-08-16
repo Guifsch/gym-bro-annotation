@@ -80,7 +80,7 @@ export default function TreinoEditorScreen() {
   async function performDeleteTreino() {
     try {
       await deleteTreino(treinoId);
-      router.replace('/(tabs)/treinos');
+      router.replace('/(tabs)/exercicios/treinos');
     } catch {
       Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
     }

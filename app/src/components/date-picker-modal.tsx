@@ -54,6 +54,7 @@ export function DatePickerModal({ visible, selectedDates, onToggleDate, onClose 
               onSelectDate={onToggleDate}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
+              markedStyle="fill"
             />
             <GradientButton title="Concluir" onPress={onClose} />
           </Card>

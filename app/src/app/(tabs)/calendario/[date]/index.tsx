@@ -73,7 +73,7 @@ export default function CalendarioDiaScreen() {
     setAddingRefeicao(true);
     try {
       const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome: 'Nova refeição', dates: [date] });
-      router.push(`/(tabs)/exercicios/alimentacao/${refeicao._id}`);
+      router.push(`/(tabs)/extras/alimentacao/${refeicao._id}`);
     } finally {
       setAddingRefeicao(false);
     }
@@ -113,7 +113,7 @@ export default function CalendarioDiaScreen() {
 
           <ThemedText type="smallBold">Registrar treino</ThemedText>
           {!loading && treinos.length === 0 ? (
-            <EmptyState icon="barbell-outline" title="Nenhum treino cadastrado ainda (crie na tab Treinos)." />
+            <EmptyState icon="barbell-outline" title="Nenhum treino cadastrado ainda (crie em Exercícios > Treinos)." />
           ) : (
             <View style={styles.list}>
               {treinos.map((item) => {
@@ -150,7 +150,7 @@ export default function CalendarioDiaScreen() {
           ) : (
             <View style={styles.list}>
               {refeicoes.map((refeicao) => (
-                <Pressable key={refeicao._id} onPress={() => router.push(`/(tabs)/exercicios/alimentacao/${refeicao._id}`)}>
+                <Pressable key={refeicao._id} onPress={() => router.push(`/(tabs)/extras/alimentacao/${refeicao._id}`)}>
                   <Card style={styles.row}>
                     <View style={{ flex: 1 }}>
                       <ThemedText type="smallBold">{refeicao.nome}</ThemedText>

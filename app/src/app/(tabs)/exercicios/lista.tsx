@@ -28,7 +28,7 @@ import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
-import { YoutubeVideoField } from '@/components/youtube-video-field';
+import { VideoLinkField } from '@/components/video-link-field';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Categoria, Exercicio } from '@/types/workout';
@@ -264,7 +264,7 @@ export default function ExerciciosListaScreen() {
                   onUpload={handleUploadImagem}
                   onDelete={handleDeleteImagem}
                 />
-                <YoutubeVideoField value={videoUrlText} onChangeText={setVideoUrlText} />
+                <VideoLinkField value={videoUrlText} onChangeText={setVideoUrlText} />
               </View>
             )}
 

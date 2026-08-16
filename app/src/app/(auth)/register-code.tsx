@@ -24,7 +24,7 @@ export default function RegisterCodeScreen() {
     setLoading(true);
     try {
       await confirmRegistration(email, code.trim());
-      router.replace('/(tabs)/treinos');
+      router.replace('/(tabs)/calendario');
     } catch {
       setError('Código inválido ou expirado.');
     } finally {

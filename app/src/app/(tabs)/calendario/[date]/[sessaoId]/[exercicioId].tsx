@@ -25,7 +25,7 @@ import { RestTimer } from '@/components/rest-timer';
 import { showToast } from '@/components/toast';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { YoutubeVideoField } from '@/components/youtube-video-field';
+import { VideoLinkField } from '@/components/video-link-field';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
@@ -206,7 +206,7 @@ export default function ExercicioDetalheScreen() {
           <Card style={styles.photoCard}>
             <ThemedText type="smallBold">Fotos do equipamento</ThemedText>
             <ExercicioImageGallery imagens={exercicio.imagens ?? []} onUpload={handleUploadImagem} onDelete={handleDeleteImagem} />
-            <YoutubeVideoField value={videoUrlText} onChangeText={setVideoUrlText} onBlur={handleSaveVideoUrl} />
+            <VideoLinkField value={videoUrlText} onChangeText={setVideoUrlText} onBlur={handleSaveVideoUrl} />
           </Card>
 
           <RestTimer />

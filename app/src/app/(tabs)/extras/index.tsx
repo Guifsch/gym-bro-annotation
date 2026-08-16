@@ -35,29 +35,17 @@ function LandingOption({ icon, title, subtitle, onPress }: LandingOptionProps) {
   );
 }
 
-export default function ExerciciosLandingScreen() {
+export default function ExtrasLandingScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <TabHeader title="Exercícios" />
+        <TabHeader title="Extras" />
 
         <LandingOption
-          icon="pricetags-outline"
-          title="Categorias"
-          subtitle="Grupos musculares que você treina"
-          onPress={() => router.push('/(tabs)/exercicios/categorias')}
-        />
-        <LandingOption
-          icon="barbell-outline"
-          title="Exercícios"
-          subtitle="Cadastre e edite seus exercícios"
-          onPress={() => router.push('/(tabs)/exercicios/lista')}
-        />
-        <LandingOption
-          icon="list-outline"
-          title="Treinos"
-          subtitle="Monte seus treinos com os exercícios cadastrados"
-          onPress={() => router.push('/(tabs)/exercicios/treinos')}
+          icon="restaurant-outline"
+          title="Alimentação"
+          subtitle="Organize suas refeições"
+          onPress={() => router.push('/(tabs)/extras/alimentacao')}
         />
       </SafeAreaView>
     </ThemedView>

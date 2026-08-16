@@ -47,8 +47,6 @@ export default function RefeicaoEditorScreen() {
   const [savingNome, setSavingNome] = useState(false);
   const [observacoes, setObservacoes] = useState('');
   const [savingObservacoes, setSavingObservacoes] = useState(false);
-  const [novoItemNome, setNovoItemNome] = useState('');
-  const [addingItem, setAddingItem] = useState(false);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [novoBlocoNome, setNovoBlocoNome] = useState('');
   const [novoBlocoHorario, setNovoBlocoHorario] = useState('');
@@ -106,29 +104,6 @@ export default function RefeicaoEditorScreen() {
     if (!refeicao) return;
     const dates = refeicao.dates.includes(date) ? refeicao.dates.filter((d) => d !== date) : [...refeicao.dates, date];
     const updated = await updateRefeicao(refeicaoId, { dates });
-    setRefeicao(updated);
-  }
-
-  async function handleAddItem() {
-    const nomeItem = novoItemNome.trim();
-    if (!refeicao || !nomeItem) return;
-    setAddingItem(true);
-    try {
-      const itens = [...refeicao.itens.map(toItemParams), { id: Crypto.randomUUID(), nome: nomeItem }];
-      const updated = await updateRefeicao(refeicaoId, { itens });
-      setRefeicao(updated);
-      setNovoItemNome('');
-    } catch (err) {
-      Alert.alert('Não foi possível adicionar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    } finally {
-      setAddingItem(false);
-    }
-  }
-
-  async function handleRemoveItem(itemId: string) {
-    if (!refeicao) return;
-    const itens = refeicao.itens.filter((item) => item._id !== itemId).map(toItemParams);
-    const updated = await updateRefeicao(refeicaoId, { itens });
     setRefeicao(updated);
   }
 
@@ -201,7 +176,7 @@ export default function RefeicaoEditorScreen() {
   async function performDelete() {
     try {
       await deleteRefeicao(refeicaoId);
-      router.replace('/(tabs)/exercicios/alimentacao');
+      router.replace('/(tabs)/extras/alimentacao');
     } catch {
       Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
     }
@@ -223,7 +198,7 @@ export default function RefeicaoEditorScreen() {
             icon="alert-circle-outline"
             title="Esta refeição não existe mais."
             actionLabel="Voltar"
-            onAction={() => router.replace('/(tabs)/exercicios/alimentacao')}
+            onAction={() => router.replace('/(tabs)/extras/alimentacao')}
           />
         </SafeAreaView>
       </ThemedView>
@@ -369,39 +344,6 @@ export default function RefeicaoEditorScreen() {
             <GradientButton title="Criar bloco" onPress={handleAddBloco} loading={creatingBloco} disabled={!novoBlocoNome.trim()} />
           </Card>
 
-          <ThemedText type="smallBold">Itens avulsos já adicionados</ThemedText>
-          {refeicao.itens.length === 0 ? (
-            <EmptyState icon="fast-food-outline" title="Nenhum item avulso ainda." />
-          ) : (
-            <View style={styles.list}>
-              {refeicao.itens.map((item) => (
-                <Card key={item._id} style={styles.itemRow}>
-                  <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
-                  <Pressable onPress={() => handleRemoveItem(item._id)} hitSlop={8} style={styles.deleteButton}>
-                    <Ionicons name="trash-outline" size={18} color="#e53935" />
-                  </Pressable>
-                </Card>
-              ))}
-            </View>
-          )}
-
-          <View style={[styles.addItemSection, { borderTopColor: theme.border }]}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Adicionar item avulso novo (fora de qualquer bloco)
-            </ThemedText>
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <LabeledTextField
-                  placeholder="Ex: 2 ovos mexidos"
-                  value={novoItemNome}
-                  onChangeText={setNovoItemNome}
-                  maxLength={200}
-                />
-              </View>
-              <GradientButton title="Adicionar" onPress={handleAddItem} loading={addingItem} disabled={!novoItemNome.trim()} />
-            </View>
-          </View>
-
           <Card style={styles.observacoesCard}>
             <LabeledTextField
               label="Observações (opcional)"
@@ -450,7 +392,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   list: { gap: Spacing.two },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   deleteButton: { padding: Spacing.one },
   blocoCard: { gap: Spacing.two },
   blocoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -466,7 +407,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   novoBlocoCard: { gap: Spacing.two },
-  addItemSection: { gap: Spacing.two, borderTopWidth: 1, paddingTop: Spacing.three, marginTop: Spacing.one },
   observacoesCard: { gap: Spacing.two },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   dangerLink: {

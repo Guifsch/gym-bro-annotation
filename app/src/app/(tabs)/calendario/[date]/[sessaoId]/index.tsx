@@ -101,7 +101,7 @@ export default function SessaoDetalheScreen() {
 
         {gruposPorCategoria.length === 0 ? (
           <ThemedText type="small">
-            Este treino não tem exercícios vinculados ainda (edite na tab Treinos).
+            Este treino não tem exercícios vinculados ainda (edite em Exercícios &gt; Treinos).
           </ThemedText>
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -24,7 +24,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await loginWithPassword(email.trim(), password);
-      router.replace('/(tabs)/treinos');
+      router.replace('/(tabs)/calendario');
     } catch {
       setError('E-mail ou senha inválidos.');
     } finally {

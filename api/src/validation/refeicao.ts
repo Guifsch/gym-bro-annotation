@@ -19,7 +19,6 @@ export const createRefeicaoSchema = z.object({
   id: uuid,
   nome: z.string().trim().min(1).max(120),
   dates: z.array(dateString).max(60).optional(),
-  itens: z.array(refeicaoItem).max(30).optional(),
   blocos: z.array(refeicaoBloco).max(20).optional(),
   observacoes: z.string().trim().max(500).optional(),
 });
@@ -27,7 +26,6 @@ export const createRefeicaoSchema = z.object({
 export const updateRefeicaoSchema = z.object({
   nome: z.string().trim().min(1).max(120).optional(),
   dates: z.array(dateString).max(60).optional(),
-  itens: z.array(refeicaoItem).max(30).optional(),
   blocos: z.array(refeicaoBloco).max(20).optional(),
   observacoes: z.string().trim().max(500).optional(),
 });

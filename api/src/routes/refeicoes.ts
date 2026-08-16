@@ -44,7 +44,7 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome, dates, itens, blocos, observacoes } = createRefeicaoSchema.parse(req.body);
+    const { id, nome, dates, blocos, observacoes } = createRefeicaoSchema.parse(req.body);
 
     const refeicao = await Refeicao.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
@@ -54,7 +54,6 @@ router.post(
           userId: req.user!.id,
           nome,
           dates: dates ?? [],
-          itens: mapItens(itens ?? []),
           blocos: mapBlocos(blocos ?? []),
           observacoes,
         },
@@ -81,14 +80,13 @@ router.patch(
   '/:id',
   asyncHandler(async (req, res) => {
     const body = updateRefeicaoSchema.parse(req.body);
-    const { itens, blocos, ...rest } = body;
+    const { blocos, ...rest } = body;
 
     const refeicao = await Refeicao.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
       {
         $set: {
           ...rest,
-          ...(itens ? { itens: mapItens(itens) } : {}),
           ...(blocos ? { blocos: mapBlocos(blocos) } : {}),
         },
       },

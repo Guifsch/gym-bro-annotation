@@ -23,7 +23,6 @@ const refeicaoSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   nome: { type: String, required: true, trim: true, maxlength: 120 },
   dates: { type: [String], default: [] },
-  itens: { type: [refeicaoItemSchema], default: [] },
   blocos: { type: [refeicaoBlocoSchema], default: [] },
   observacoes: { type: String, trim: true, maxlength: 500 },
   createdAt: { type: Date, default: Date.now },

@@ -14,6 +14,9 @@ interface MonthCalendarProps {
   onSelectDate: (date: string) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  /** 'dot' (default) is a subtle indicator (e.g. "has a session logged"); 'fill' is a much more
+   * visible solid circle, meant for contexts where marked = actively selected (e.g. a date picker). */
+  markedStyle?: 'dot' | 'fill';
 }
 
 const WEEKDAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -41,7 +44,15 @@ interface DayCell {
   date: string;
 }
 
-export function MonthCalendar({ year, month, markedDates, onSelectDate, onPrevMonth, onNextMonth }: MonthCalendarProps) {
+export function MonthCalendar({
+  year,
+  month,
+  markedDates,
+  onSelectDate,
+  onPrevMonth,
+  onNextMonth,
+  markedStyle = 'dot',
+}: MonthCalendarProps) {
   const theme = useTheme();
   const todayStr = getTodayDateString();
 
@@ -96,6 +107,12 @@ export function MonthCalendar({ year, month, markedDates, onSelectDate, onPrevMo
                       {cell.day}
                     </ThemedText>
                   </LinearGradient>
+                ) : isMarked && markedStyle === 'fill' ? (
+                  <View style={[styles.dayCircle, { backgroundColor: Brand.primary }]}>
+                    <ThemedText type="smallBold" style={styles.todayText}>
+                      {cell.day}
+                    </ThemedText>
+                  </View>
                 ) : (
                   <View style={styles.dayCircle}>
                     <ThemedText type="small">{cell.day}</ThemedText>
