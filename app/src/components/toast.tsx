@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 
-const TAB_SCREEN_PREFIXES = ['/calendario', '/exercicios', '/treinos'];
+const TAB_SCREEN_PREFIXES = ['/calendario', '/exercicios', '/extras'];
 
 export type ToastType = 'success' | 'error';
 

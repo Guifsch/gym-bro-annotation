@@ -4,7 +4,7 @@ const uuid = z.string().uuid();
 const nome = z.string().trim().min(1).max(120);
 const exercicioNome = z.string().trim().min(1).max(50);
 const descricao = z.string().trim().max(200).optional();
-const videoUrl = z.string().trim().max(500).optional();
+const videoUrls = z.array(z.string().trim().max(500)).max(5).optional();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
 export const createCategoriaSchema = z.object({
@@ -25,7 +25,7 @@ export const createExercicioSchema = z.object({
   reps: z.number().int().min(0).max(500),
   pesoKg: z.number().min(0).max(1000),
   cargaMaximaKg: z.number().min(0).max(500).optional(),
-  videoUrl,
+  videoUrls,
 });
 
 export const updateExercicioSchema = z.object({
@@ -36,7 +36,7 @@ export const updateExercicioSchema = z.object({
   reps: z.number().int().min(0).max(500).optional(),
   pesoKg: z.number().min(0).max(1000).optional(),
   cargaMaximaKg: z.number().min(0).max(500).optional(),
-  videoUrl,
+  videoUrls,
 });
 
 export const createTreinoSchema = z.object({

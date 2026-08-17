@@ -17,7 +17,8 @@ export interface Exercicio {
   reps: number;
   pesoKg: number;
   cargaMaximaKg?: number;
-  videoUrl?: string;
+  capa?: ExercicioImagem;
+  videoUrls: string[];
   imagens: ExercicioImagem[];
 }
 

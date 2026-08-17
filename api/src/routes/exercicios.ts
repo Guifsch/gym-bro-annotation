@@ -27,7 +27,7 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrl } = createExercicioSchema.parse(
+    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrls } = createExercicioSchema.parse(
       req.body
     );
 
@@ -43,7 +43,7 @@ router.post(
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
       {
-        $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrl },
+        $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrls },
       },
       { upsert: true, new: true }
     );
@@ -132,6 +132,9 @@ router.delete(
     for (const imagem of exercicio.imagens) {
       await deleteImageFromR2(imagem.key);
     }
+    if (exercicio.capa) {
+      await deleteImageFromR2(exercicio.capa.key);
+    }
 
     await Treino.updateMany(
       { userId: req.user!.id, exercicioIds: req.params.id },
@@ -191,6 +194,59 @@ router.delete(
     if (found) {
       await deleteImageFromR2(key);
       exercicio.imagens = exercicio.imagens.filter((imagem) => imagem.key !== key) as typeof exercicio.imagens;
+      await exercicio.save();
+    }
+
+    res.status(200).json({ exercicio });
+  })
+);
+
+router.post(
+  '/:id/capa',
+  express.raw({ type: ALLOWED_IMAGE_TYPES, limit: MAX_IMAGE_SIZE_BYTES }),
+  asyncHandler(async (req, res) => {
+    const contentType = req.headers['content-type'] ?? '';
+    if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
+      res.status(400).json({ error: 'Tipo de imagem não suportado' });
+      return;
+    }
+
+    const buffer = req.body as Buffer;
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+      res.status(400).json({ error: 'Imagem vazia' });
+      return;
+    }
+
+    const exercicio = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id });
+    if (!exercicio) {
+      res.status(404).json({ error: 'Exercício não encontrado' });
+      return;
+    }
+
+    const oldCapa = exercicio.capa;
+    const { key, url } = await uploadImageToR2(buffer, contentType, req.user!.id, 'exercicios');
+    exercicio.capa = { url, key };
+    await exercicio.save();
+    if (oldCapa) {
+      await deleteImageFromR2(oldCapa.key);
+    }
+
+    res.status(200).json({ exercicio });
+  })
+);
+
+router.delete(
+  '/:id/capa',
+  asyncHandler(async (req, res) => {
+    const exercicio = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id });
+    if (!exercicio) {
+      res.status(404).json({ error: 'Exercício não encontrado' });
+      return;
+    }
+
+    if (exercicio.capa) {
+      await deleteImageFromR2(exercicio.capa.key);
+      exercicio.capa = undefined;
       await exercicio.save();
     }
 

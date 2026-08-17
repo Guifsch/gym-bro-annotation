@@ -1,20 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import {
+  deleteExercicioCapa,
   deleteExercicioImagem,
   getSessao,
   listExercicios,
   updateExercicio,
+  uploadExercicioCapa,
   uploadExercicioImagem,
   type UpsertEntryParams,
 } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
 import { ExercicioEntryEditor, type LogFields } from '@/components/exercicio-entry-editor';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
@@ -25,7 +29,7 @@ import { RestTimer } from '@/components/rest-timer';
 import { showToast } from '@/components/toast';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { VideoLinkField } from '@/components/video-link-field';
+import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
@@ -41,7 +45,6 @@ export default function ExercicioDetalheScreen() {
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [cargaMaximaText, setCargaMaximaText] = useState('');
-  const [videoUrlText, setVideoUrlText] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [historicoVisible, setHistoricoVisible] = useState(false);
@@ -55,7 +58,6 @@ export default function ExercicioDetalheScreen() {
     setNome(exercicioData.nome);
     setDescricao(exercicioData.descricao ?? '');
     setCargaMaximaText(exercicioData.cargaMaximaKg !== undefined ? String(exercicioData.cargaMaximaKg) : '');
-    setVideoUrlText(exercicioData.videoUrl ?? '');
   }, [sessaoId, exercicioId]);
 
   useFocusEffect(
@@ -87,17 +89,25 @@ export default function ExercicioDetalheScreen() {
   async function handleSaveNome() {
     const trimmed = nome.trim();
     if (!trimmed || !exercicio || trimmed === exercicio.nome) return;
-    const updated = await updateExercicio(exercicio._id, { nome: trimmed });
-    setExercicio(updated);
-    showToast('Nome atualizado');
+    try {
+      const updated = await updateExercicio(exercicio._id, { nome: trimmed });
+      setExercicio(updated);
+      showToast('Nome atualizado');
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleSaveDescricao() {
     const trimmed = descricao.trim();
     if (!exercicio || trimmed === (exercicio.descricao ?? '')) return;
-    const updated = await updateExercicio(exercicio._id, { descricao: trimmed });
-    setExercicio(updated);
-    showToast('Descrição atualizada');
+    try {
+      const updated = await updateExercicio(exercicio._id, { descricao: trimmed });
+      setExercicio(updated);
+      showToast('Descrição atualizada');
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleSaveCargaMaxima() {
@@ -106,32 +116,81 @@ export default function ExercicioDetalheScreen() {
     const parsed = trimmed ? Number(trimmed.replace(',', '.')) : undefined;
     if (trimmed && !Number.isFinite(parsed)) return;
     if (parsed === exercicio.cargaMaximaKg) return;
-    const updated = await updateExercicio(exercicio._id, { cargaMaximaKg: parsed });
-    setExercicio(updated);
-    showToast('Carga máxima atualizada');
+    try {
+      const updated = await updateExercicio(exercicio._id, { cargaMaximaKg: parsed });
+      setExercicio(updated);
+      showToast('Carga máxima atualizada');
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
-  async function handleSaveVideoUrl() {
+  async function handleUploadCapa(uri: string, contentType: string) {
     if (!exercicio) return;
-    const trimmed = videoUrlText.trim();
-    if (trimmed === (exercicio.videoUrl ?? '')) return;
-    const updated = await updateExercicio(exercicio._id, { videoUrl: trimmed });
-    setExercicio(updated);
-    showToast('Vídeo atualizado');
+    try {
+      const updated = await uploadExercicioCapa(exercicio._id, uri, contentType);
+      setExercicio(updated);
+      showToast('Capa salva');
+    } catch (err) {
+      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
+  }
+
+  async function handleDeleteCapa() {
+    if (!exercicio) return;
+    try {
+      const updated = await deleteExercicioCapa(exercicio._id);
+      setExercicio(updated);
+      showToast('Capa removida');
+    } catch {
+      Alert.alert('Não foi possível remover', 'Tente novamente em instantes.');
+    }
+  }
+
+  async function handleAddVideo(url: string) {
+    if (!exercicio) return;
+    try {
+      const videoUrls = [...exercicio.videoUrls, url];
+      const updated = await updateExercicio(exercicio._id, { videoUrls });
+      setExercicio(updated);
+      showToast('Vídeo adicionado');
+    } catch (err) {
+      Alert.alert('Não foi possível adicionar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
+  }
+
+  async function handleRemoveVideo(url: string) {
+    if (!exercicio) return;
+    try {
+      const videoUrls = exercicio.videoUrls.filter((v) => v !== url);
+      const updated = await updateExercicio(exercicio._id, { videoUrls });
+      setExercicio(updated);
+      showToast('Vídeo removido');
+    } catch (err) {
+      Alert.alert('Não foi possível remover', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleUploadImagem(uri: string, contentType: string) {
     if (!exercicio) return;
-    const updated = await uploadExercicioImagem(exercicio._id, uri, contentType);
-    setExercicio(updated);
-    showToast('Foto salva');
+    try {
+      const updated = await uploadExercicioImagem(exercicio._id, uri, contentType);
+      setExercicio(updated);
+      showToast('Foto salva');
+    } catch (err) {
+      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleDeleteImagem(key: string) {
     if (!exercicio) return;
-    const updated = await deleteExercicioImagem(exercicio._id, key);
-    setExercicio(updated);
-    showToast('Foto removida');
+    try {
+      const updated = await deleteExercicioImagem(exercicio._id, key);
+      setExercicio(updated);
+      showToast('Foto removida');
+    } catch {
+      Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
+    }
   }
 
   function handleSaveFields(fields: LogFields) {
@@ -170,6 +229,8 @@ export default function ExercicioDetalheScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ExercicioCoverPhoto capa={exercicio.capa} onUpload={handleUploadCapa} onDelete={handleDeleteCapa} />
+
           <Card style={styles.nameCard}>
             <LabeledTextField label="Nome" value={nome} onChangeText={setNome} onBlur={handleSaveNome} maxLength={50} />
             <LabeledTextField
@@ -206,7 +267,10 @@ export default function ExercicioDetalheScreen() {
           <Card style={styles.photoCard}>
             <ThemedText type="smallBold">Fotos do equipamento</ThemedText>
             <ExercicioImageGallery imagens={exercicio.imagens ?? []} onUpload={handleUploadImagem} onDelete={handleDeleteImagem} />
-            <VideoLinkField value={videoUrlText} onChangeText={setVideoUrlText} onBlur={handleSaveVideoUrl} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Vídeos
+            </ThemedText>
+            <VideoLinkGallery videos={exercicio.videoUrls} onAdd={handleAddVideo} onRemove={handleRemoveVideo} />
           </Card>
 
           <RestTimer />

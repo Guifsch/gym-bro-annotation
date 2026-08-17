@@ -23,7 +23,20 @@ const exercicioSchema = new Schema({
   reps: { type: Number, required: true, min: 0, max: 500 },
   pesoKg: { type: Number, required: true, min: 0, max: 1000 },
   cargaMaximaKg: { type: Number, min: 0, max: 500 },
-  videoUrl: { type: String, trim: true, maxlength: 500 },
+  capa: {
+    type: { url: { type: String, required: true }, key: { type: String, required: true } },
+    required: false,
+    _id: false,
+  },
+  videoUrls: {
+    type: [String],
+    default: [],
+    maxlength: 500,
+    validate: {
+      validator: (arr: string[]) => arr.length <= 5,
+      message: 'Limite de 5 vídeos por exercício',
+    },
+  },
   imagens: {
     type: [{ url: { type: String, required: true }, key: { type: String, required: true } }],
     default: [],

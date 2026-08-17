@@ -9,16 +9,19 @@ import { getApiErrorMessage } from '@/api/apiClient';
 import {
   createExercicio,
   deleteExercicio,
+  deleteExercicioCapa,
   deleteExercicioImagem,
   listCategorias,
   listExercicios,
   updateExercicio,
+  uploadExercicioCapa,
   uploadExercicioImagem,
 } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { GradientButton } from '@/components/gradient-button';
@@ -28,7 +31,7 @@ import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
-import { VideoLinkField } from '@/components/video-link-field';
+import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Categoria, Exercicio } from '@/types/workout';
@@ -49,7 +52,6 @@ export default function ExerciciosListaScreen() {
   const [repsText, setRepsText] = useState('');
   const [pesoText, setPesoText] = useState('');
   const [cargaMaximaText, setCargaMaximaText] = useState('');
-  const [videoUrlText, setVideoUrlText] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -94,16 +96,70 @@ export default function ExerciciosListaScreen() {
 
   async function handleUploadImagem(uri: string, contentType: string) {
     if (!editingId) return;
-    const updated = await uploadExercicioImagem(editingId, uri, contentType);
-    setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-    showToast('Foto salva');
+    try {
+      const updated = await uploadExercicioImagem(editingId, uri, contentType);
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Foto salva');
+    } catch (err) {
+      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleDeleteImagem(key: string) {
     if (!editingId) return;
-    const updated = await deleteExercicioImagem(editingId, key);
-    setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-    showToast('Foto removida');
+    try {
+      const updated = await deleteExercicioImagem(editingId, key);
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Foto removida');
+    } catch {
+      Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
+    }
+  }
+
+  async function handleUploadCapa(uri: string, contentType: string) {
+    if (!editingId) return;
+    try {
+      const updated = await uploadExercicioCapa(editingId, uri, contentType);
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Capa salva');
+    } catch (err) {
+      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
+  }
+
+  async function handleDeleteCapa() {
+    if (!editingId) return;
+    try {
+      const updated = await deleteExercicioCapa(editingId);
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Capa removida');
+    } catch {
+      Alert.alert('Não foi possível remover', 'Tente novamente em instantes.');
+    }
+  }
+
+  async function handleAddVideo(url: string) {
+    if (!editingId || !editingExercicio) return;
+    try {
+      const videoUrls = [...editingExercicio.videoUrls, url];
+      const updated = await updateExercicio(editingId, { videoUrls });
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Vídeo adicionado');
+    } catch (err) {
+      Alert.alert('Não foi possível adicionar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
+  }
+
+  async function handleRemoveVideo(url: string) {
+    if (!editingId || !editingExercicio) return;
+    try {
+      const videoUrls = editingExercicio.videoUrls.filter((v) => v !== url);
+      const updated = await updateExercicio(editingId, { videoUrls });
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      showToast('Vídeo removido');
+    } catch (err) {
+      Alert.alert('Não foi possível remover', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   function resetForm() {
@@ -115,7 +171,6 @@ export default function ExerciciosListaScreen() {
     setRepsText('');
     setPesoText('');
     setCargaMaximaText('');
-    setVideoUrlText('');
     setCategoriaId(null);
   }
 
@@ -127,7 +182,6 @@ export default function ExerciciosListaScreen() {
     setRepsText(String(exercicio.reps));
     setPesoText(String(exercicio.pesoKg));
     setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
-    setVideoUrlText(exercicio.videoUrl ?? '');
     setCategoriaId(exercicio.categoriaId);
   }
 
@@ -157,7 +211,6 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
-          videoUrl: videoUrlText.trim(),
         });
         setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
       } else {
@@ -170,7 +223,6 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
-          videoUrl: videoUrlText.trim(),
         });
         setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
         setCreating(false);
@@ -217,6 +269,10 @@ export default function ExerciciosListaScreen() {
               onPress={() => setCreating(true)}
             />
           ) : (
+          <>
+          {editingExercicio && (
+            <ExercicioCoverPhoto capa={editingExercicio.capa} onUpload={handleUploadCapa} onDelete={handleDeleteCapa} />
+          )}
           <Card style={styles.formCard}>
             <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
             <LabeledTextField
@@ -228,6 +284,17 @@ export default function ExerciciosListaScreen() {
               numberOfLines={3}
               style={styles.multiline}
             />
+
+            <LabeledTextField
+              label="Carga máxima (1RM, opcional)"
+              value={cargaMaximaText}
+              onChangeText={setCargaMaximaText}
+              keyboardType="decimal-pad"
+              maxLength={7}
+            />
+            {Number(cargaMaximaText.replace(',', '.')) > 0 && (
+              <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
+            )}
 
             <View style={styles.fieldsRow}>
               <View style={styles.field}>
@@ -259,17 +326,6 @@ export default function ExerciciosListaScreen() {
               </View>
             </View>
 
-            <LabeledTextField
-              label="Carga máxima (1RM, opcional)"
-              value={cargaMaximaText}
-              onChangeText={setCargaMaximaText}
-              keyboardType="decimal-pad"
-              maxLength={7}
-            />
-            {Number(cargaMaximaText.replace(',', '.')) > 0 && (
-              <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
-            )}
-
             {editingExercicio && (
               <View style={styles.photoSection}>
                 <ThemedText type="small" themeColor="textSecondary">
@@ -280,7 +336,10 @@ export default function ExerciciosListaScreen() {
                   onUpload={handleUploadImagem}
                   onDelete={handleDeleteImagem}
                 />
-                <VideoLinkField value={videoUrlText} onChangeText={setVideoUrlText} />
+                <ThemedText type="small" themeColor="textSecondary">
+                  Vídeos
+                </ThemedText>
+                <VideoLinkGallery videos={editingExercicio.videoUrls} onAdd={handleAddVideo} onRemove={handleRemoveVideo} />
               </View>
             )}
 
@@ -335,6 +394,7 @@ export default function ExerciciosListaScreen() {
               </View>
             </View>
           </Card>
+          </>
           )}
 
           {!creating && !editingId && (

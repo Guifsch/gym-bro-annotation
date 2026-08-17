@@ -47,7 +47,7 @@ export interface CreateExercicioParams {
   reps: number;
   pesoKg: number;
   cargaMaximaKg?: number;
-  videoUrl?: string;
+  videoUrls?: string[];
 }
 
 export async function createExercicio(params: CreateExercicioParams): Promise<Exercicio> {
@@ -63,7 +63,7 @@ export interface UpdateExercicioParams {
   reps?: number;
   pesoKg?: number;
   cargaMaximaKg?: number;
-  videoUrl?: string;
+  videoUrls?: string[];
 }
 
 export async function updateExercicio(id: string, params: UpdateExercicioParams): Promise<Exercicio> {
@@ -101,6 +101,25 @@ export async function uploadExercicioImagem(id: string, uri: string, contentType
 
 export async function deleteExercicioImagem(id: string, key: string): Promise<Exercicio> {
   const { data } = await apiClient.delete(`/api/exercicios/${id}/imagens/${encodeURIComponent(key)}`);
+  return data.exercicio;
+}
+
+export async function uploadExercicioCapa(id: string, uri: string, contentType: string): Promise<Exercicio> {
+  const token = getAccessToken();
+  const result = await new File(uri).upload(`${API_URL}/api/exercicios/${id}/capa`, {
+    headers: {
+      'Content-Type': contentType,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`Falha no upload da capa (status ${result.status})`);
+  }
+  return JSON.parse(result.body).exercicio;
+}
+
+export async function deleteExercicioCapa(id: string): Promise<Exercicio> {
+  const { data } = await apiClient.delete(`/api/exercicios/${id}/capa`);
   return data.exercicio;
 }
 

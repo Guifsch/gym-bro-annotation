@@ -12,6 +12,7 @@ const exercicio: Exercicio = {
   reps: 10,
   pesoKg: 30,
   imagens: [],
+  videoUrls: [],
 };
 
 const emptySessao: Sessao = {

@@ -1,8 +1,18 @@
+import { isAxiosError } from 'axios';
 import * as Crypto from 'expo-crypto';
 
+import { getApiErrorMessage } from '@/api/apiClient';
 import { upsertSessaoEntry, type UpsertEntryParams } from '@/api/workoutApi';
+import { showToast } from '@/components/toast';
 
 import { readJson, writeJson } from './storage';
+
+/** A 4xx means the server actively rejected the request (bad value, not found, etc.) — retrying the
+ * exact same payload will never succeed, unlike a network blip or a 5xx from a cold/overloaded server. */
+function isPermanentFailure(err: unknown): boolean {
+  const status = isAxiosError(err) ? err.response?.status : undefined;
+  return typeof status === 'number' && status >= 400 && status < 500;
+}
 
 const QUEUE_STORAGE_KEY = 'gymbro.mutationQueue.v1';
 const BASE_BACKOFF_MS = 2_000;
@@ -73,7 +83,17 @@ export async function drainQueue(): Promise<void> {
         queue.shift();
         await persist();
         notifyListeners();
-      } catch {
+      } catch (err) {
+        if (isPermanentFailure(err)) {
+          // Drop it instead of retrying forever, and move on — otherwise this single bad mutation
+          // blocks every valid one queued after it, indefinitely.
+          queue.shift();
+          await persist();
+          notifyListeners();
+          showToast(getApiErrorMessage(err, 'Não foi possível salvar uma alteração pendente.'), 'error');
+          continue;
+        }
+
         mutation.attempts += 1;
         const backoff = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** mutation.attempts) + Math.random() * 500;
         mutation.nextAttemptAt = Date.now() + backoff;
