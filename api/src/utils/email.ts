@@ -35,7 +35,10 @@ function getGmailTransporter(): Transporter {
 
 async function sendGmailEmail(params: { to: string; subject: string; html: string }): Promise<void> {
   await getGmailTransporter().sendMail({
-    from: env.gmailUser,
+    // A bare address here falls back to whatever display name is set on the Gmail account's own
+    // profile (could be anything the account owner typed in ages ago) — set it explicitly instead,
+    // matching how RESEND_FROM_EMAIL already carries "Gym Bro <...>".
+    from: `Gym Bro <${env.gmailUser}>`,
     to: params.to,
     subject: params.subject,
     html: params.html,
