@@ -45,7 +45,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         const { user, accessToken } = await authApi.refreshSession(refreshToken);
         setAccessToken(accessToken);
         set({ status: 'authenticated', user });
-      } catch {
+      } catch (err) {
+        console.error('[auth] bootstrap: refresh failed', err);
         await clearRefreshToken();
         set({ status: 'anonymous', user: null });
       }

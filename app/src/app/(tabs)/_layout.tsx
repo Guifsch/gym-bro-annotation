@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import type { BottomTabBarButtonProps } from 'expo-router/build/react-navigation/bottom-tabs/types';
-import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,15 +41,6 @@ export default function TabsLayout() {
       bootstrap();
     }
   }, [status, bootstrap]);
-
-  // The native splash (branded, reliable) stays up for the whole auth check instead of handing off to
-  // any in-JS loading screen — that check can take a while on a Render cold start, and a splash that's
-  // already proven visible beats a custom screen that might not paint the instant the splash goes away.
-  useEffect(() => {
-    if (status === 'authenticated' || status === 'anonymous') {
-      void SplashScreen.hideAsync();
-    }
-  }, [status]);
 
   if (status === 'anonymous') {
     return <Redirect href="/(auth)/login" />;

@@ -7,8 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteTreino, getTreino, listCategorias, listExercicios, updateTreino } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
-import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { LoadingView } from '@/components/loading-view';
@@ -131,7 +131,7 @@ export default function TreinoEditorScreen() {
                 return (
                   <Pressable key={item._id} onPress={() => handleToggleExercicio(item._id)}>
                     <Card style={[styles.exercicioRow, linked && { borderColor: Brand.primary, borderWidth: 2 }]}>
-                      <CategoryIcon nome={categoriaNome} />
+                      <ExercicioThumbnail exercicio={item} categoriaNome={categoriaNome} />
                       <View style={{ flex: 1 }}>
                         <ThemedText type="smallBold">{item.nome}</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">

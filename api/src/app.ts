@@ -19,6 +19,11 @@ export function createApp() {
   app.use(cors({ origin: env.corsOrigin }));
   app.use(express.json());
 
+  app.use((req, _res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} from ${req.ip}`);
+    next();
+  });
+
   app.get('/api/health', (_req, res) => {
     res.status(200).json({ ok: true });
   });

@@ -24,6 +24,7 @@ import { EmptyState } from '@/components/empty-state';
 import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
+import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { PercentualTable } from '@/components/percentual-table';
@@ -416,7 +417,7 @@ export default function ExerciciosListaScreen() {
                           <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
                             <Pressable onPress={() => startEditing(item)}>
                               <Card style={styles.itemRow}>
-                                <CategoryIcon nome={grupo.nome} />
+                                <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} />
                                 <View style={{ flex: 1 }}>
                                   <ThemedText type="smallBold">{item.nome}</ThemedText>
                                   <ThemedText type="small" themeColor="textSecondary">

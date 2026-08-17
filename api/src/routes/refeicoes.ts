@@ -8,6 +8,8 @@ import { createRefeicaoSchema, updateRefeicaoSchema } from '../validation/refeic
 const router = Router();
 router.use(requireAuth);
 
+const MAX_REFEICOES = 200;
+
 interface ItemInput {
   id: string;
   nome: string;
@@ -45,6 +47,15 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const { id, nome, dates, blocos, observacoes } = createRefeicaoSchema.parse(req.body);
+
+    const existing = await Refeicao.findOne({ _id: id, userId: req.user!.id });
+    if (!existing) {
+      const count = await Refeicao.countDocuments({ userId: req.user!.id });
+      if (count >= MAX_REFEICOES) {
+        res.status(409).json({ error: `Limite de ${MAX_REFEICOES} refeições atingido` });
+        return;
+      }
+    }
 
     const refeicao = await Refeicao.findOneAndUpdate(
       { _id: id, userId: req.user!.id },

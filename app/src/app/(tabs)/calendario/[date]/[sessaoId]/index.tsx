@@ -8,6 +8,7 @@ import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { LoadingView } from '@/components/loading-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -124,7 +125,7 @@ export default function SessaoDetalheScreen() {
                         key={exercicio._id}
                         onPress={() => router.push(`/(tabs)/calendario/${date}/${sessaoId}/${exercicio._id}`)}>
                         <Card style={styles.exercicioRow}>
-                          <CategoryIcon nome={grupo.nome} size={18} />
+                          <ExercicioThumbnail exercicio={exercicio} categoriaNome={grupo.nome} size={18} />
                           <View style={styles.exercicioText}>
                             <ThemedText type="smallBold">{exercicio.nome}</ThemedText>
                             <ThemedText type="small" themeColor="textSecondary">

@@ -18,6 +18,7 @@ import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { SwipeableRow } from '@/components/swipeable-row';
@@ -183,6 +184,7 @@ export default function CategoriasScreen() {
                       <View style={styles.exerciciosList}>
                         {exerciciosDaCategoria.map((exercicio) => (
                           <View key={exercicio._id} style={styles.exercicioRow}>
+                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={item.nome} size={14} />
                             <ThemedText type="small" style={{ flex: 1 }}>
                               {exercicio.nome}
                             </ThemedText>
