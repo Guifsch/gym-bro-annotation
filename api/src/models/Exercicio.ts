@@ -22,7 +22,7 @@ const exercicioSchema = new Schema({
   sets: { type: Number, required: true, min: 0, max: 50 },
   reps: { type: Number, required: true, min: 0, max: 500 },
   pesoKg: { type: Number, required: true, min: 0, max: 1000 },
-  cargaMaximaKg: { type: Number, min: 0, max: 2000 },
+  cargaMaximaKg: { type: Number, min: 0, max: 500 },
   videoUrl: { type: String, trim: true, maxlength: 500 },
   imagens: {
     type: [{ url: { type: String, required: true }, key: { type: String, required: true } }],
