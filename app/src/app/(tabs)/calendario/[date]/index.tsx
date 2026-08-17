@@ -1,12 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Crypto from 'expo-crypto';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { createRefeicao, deleteSessao, listRefeicoes, listSessoesForDay, listTreinos, logTreinoForDay } from '@/api/workoutApi';
+import { deleteSessao, listRefeicoes, listSessoesForDay, listTreinos, logTreinoForDay, updateRefeicao } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
@@ -27,7 +26,7 @@ export default function CalendarioDiaScreen() {
   const [refeicoes, setRefeicoes] = useState<Refeicao[]>([]);
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState<string | null>(null);
-  const [addingRefeicao, setAddingRefeicao] = useState(false);
+  const [linkingRefeicaoId, setLinkingRefeicaoId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [sessoesData, treinosData, refeicoesData] = await Promise.all([
@@ -37,8 +36,11 @@ export default function CalendarioDiaScreen() {
     ]);
     setSessoes(sessoesData);
     setTreinos(treinosData);
-    setRefeicoes(refeicoesData.filter((r) => r.dates.includes(date)));
+    setRefeicoes(refeicoesData);
   }, [date]);
+
+  const refeicoesDoDia = refeicoes.filter((r) => r.dates.includes(date));
+  const nadaRegistrado = sessoes.length === 0 && refeicoesDoDia.length === 0;
 
   useFocusEffect(
     useCallback(() => {
@@ -69,13 +71,15 @@ export default function CalendarioDiaScreen() {
     }
   }
 
-  async function handleAddRefeicao() {
-    setAddingRefeicao(true);
+  async function handleToggleRefeicaoLink(refeicao: Refeicao) {
+    const linked = refeicao.dates.includes(date);
+    const dates = linked ? refeicao.dates.filter((d) => d !== date) : [...refeicao.dates, date];
+    setLinkingRefeicaoId(refeicao._id);
     try {
-      const refeicao = await createRefeicao({ id: Crypto.randomUUID(), nome: 'Nova refeição', dates: [date] });
-      router.push(`/(tabs)/extras/alimentacao/${refeicao._id}`);
+      const updated = await updateRefeicao(refeicao._id, { dates });
+      setRefeicoes((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
     } finally {
-      setAddingRefeicao(false);
+      setLinkingRefeicaoId(null);
     }
   }
 
@@ -85,73 +89,35 @@ export default function CalendarioDiaScreen() {
         <BackHeader title={formatDateDisplay(date)} />
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {sessoes.length > 0 && (
-            <>
-              <ThemedText type="smallBold">Registrado hoje</ThemedText>
-              <View style={styles.tileWrap}>
-                {sessoes.map((sessao) => (
-                  <Pressable key={sessao._id} onPress={() => router.push(`/(tabs)/calendario/${date}/${sessao._id}`)}>
-                    <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={styles.tile}>
-                      <View style={styles.tileIcon}>
-                        <Ionicons name="barbell" size={22} color="#fff" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <ThemedText type="smallBold" style={styles.tileText}>
-                          {sessao.treinoNome}
-                        </ThemedText>
-                        <ThemedText type="small" style={styles.tileSubtext}>
-                          Toque para editar os exercícios
-                        </ThemedText>
-                      </View>
-                      <Ionicons name="chevron-forward" size={22} color="#fff" />
-                    </LinearGradient>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-
-          <ThemedText type="smallBold">Registrar treino</ThemedText>
-          {!loading && treinos.length === 0 ? (
-            <EmptyState icon="barbell-outline" title="Nenhum treino cadastrado ainda (crie em Exercícios > Treinos)." />
+          <ThemedText type="smallBold">Registrado neste dia</ThemedText>
+          {nadaRegistrado ? (
+            <EmptyState icon="calendar-outline" title="Nada vinculado a este dia ainda." />
           ) : (
-            <View style={styles.list}>
-              {treinos.map((item) => {
-                const registrado = sessoes.some((s) => s.treinoId === item._id);
-                return (
-                  <Pressable
-                    key={item._id}
-                    onPress={() => handleToggleTreino(item)}
-                    disabled={logging === item._id}>
-                    <Card style={[styles.row, registrado && { borderColor: Brand.primary, borderWidth: 2 }]}>
-                      <ThemedText>{item.nome}</ThemedText>
-                      {registrado ? (
-                        <View style={[styles.checkCircle, { backgroundColor: Brand.primary }]}>
-                          <Ionicons name="checkmark" size={14} color="#fff" />
-                        </View>
-                      ) : (
-                        <View style={[styles.checkCircle, { borderColor: theme.border, borderWidth: 2 }]} />
-                      )}
-                    </Card>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          <View style={styles.sectionHeaderRow}>
-            <ThemedText type="smallBold">Refeições</ThemedText>
-            <Pressable onPress={handleAddRefeicao} disabled={addingRefeicao} hitSlop={8} style={styles.addRefeicaoButton}>
-              <Ionicons name="add-circle-outline" size={20} color={Brand.primary} />
-            </Pressable>
-          </View>
-          {refeicoes.length === 0 ? (
-            <EmptyState icon="restaurant-outline" title="Nenhuma refeição vinculada a este dia ainda." />
-          ) : (
-            <View style={styles.list}>
-              {refeicoes.map((refeicao) => (
+            <View style={styles.tileWrap}>
+              {sessoes.map((sessao) => (
+                <Pressable key={sessao._id} onPress={() => router.push(`/(tabs)/calendario/${date}/${sessao._id}`)}>
+                  <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={styles.tile}>
+                    <View style={styles.tileIcon}>
+                      <Ionicons name="barbell" size={22} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText type="smallBold" style={styles.tileText}>
+                        {sessao.treinoNome}
+                      </ThemedText>
+                      <ThemedText type="small" style={styles.tileSubtext}>
+                        Toque para editar os exercícios
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={22} color="#fff" />
+                  </LinearGradient>
+                </Pressable>
+              ))}
+              {refeicoesDoDia.map((refeicao) => (
                 <Pressable key={refeicao._id} onPress={() => router.push(`/(tabs)/extras/alimentacao/${refeicao._id}`)}>
-                  <Card style={styles.row}>
+                  <Card style={styles.agendaRow}>
+                    <View style={[styles.agendaIcon, { backgroundColor: 'rgba(255,122,69,0.15)' }]}>
+                      <Ionicons name="restaurant" size={20} color={Brand.accent} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <ThemedText type="smallBold">{refeicao.nome}</ThemedText>
                       <ThemedText type="small" themeColor="textSecondary">
@@ -164,6 +130,69 @@ export default function CalendarioDiaScreen() {
               ))}
             </View>
           )}
+
+          <Card style={styles.linkCard}>
+            <ThemedText type="smallBold">Vincular a este dia</ThemedText>
+
+            <ThemedText type="small" themeColor="textSecondary">
+              Treinos
+            </ThemedText>
+            {!loading && treinos.length === 0 ? (
+              <EmptyState icon="barbell-outline" title="Nenhum treino cadastrado ainda (crie em Exercícios > Treinos)." />
+            ) : (
+              <View style={styles.list}>
+                {treinos.map((item) => {
+                  const registrado = sessoes.some((s) => s.treinoId === item._id);
+                  return (
+                    <Pressable key={item._id} onPress={() => handleToggleTreino(item)} disabled={logging === item._id}>
+                      <View style={[styles.linkRow, { borderColor: registrado ? Brand.primary : theme.border }]}>
+                        <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
+                        {registrado ? (
+                          <View style={[styles.checkCircle, { backgroundColor: Brand.primary }]}>
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                          </View>
+                        ) : (
+                          <View style={[styles.checkCircle, { borderColor: theme.border, borderWidth: 2 }]} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+            <ThemedText type="small" themeColor="textSecondary">
+              Refeições
+            </ThemedText>
+            {!loading && refeicoes.length === 0 ? (
+              <EmptyState icon="restaurant-outline" title="Nenhuma refeição cadastrada ainda (crie em Extras > Alimentação)." />
+            ) : (
+              <View style={styles.list}>
+                {refeicoes.map((item) => {
+                  const linked = item.dates.includes(date);
+                  return (
+                    <Pressable
+                      key={item._id}
+                      onPress={() => handleToggleRefeicaoLink(item)}
+                      disabled={linkingRefeicaoId === item._id}>
+                      <View style={[styles.linkRow, { borderColor: linked ? Brand.primary : theme.border }]}>
+                        <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
+                        {linked ? (
+                          <View style={[styles.checkCircle, { backgroundColor: Brand.primary }]}>
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                          </View>
+                        ) : (
+                          <View style={[styles.checkCircle, { borderColor: theme.border, borderWidth: 2 }]} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </Card>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -174,8 +203,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  addRefeicaoButton: { padding: Spacing.one },
   tileWrap: { gap: Spacing.two },
   tile: {
     flexDirection: 'row',
@@ -195,8 +222,26 @@ const styles = StyleSheet.create({
   },
   tileText: { color: '#fff', fontSize: 18 },
   tileSubtext: { color: 'rgba(255,255,255,0.85)' },
+  agendaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  agendaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  linkCard: { gap: Spacing.two },
+  divider: { height: 1, marginVertical: Spacing.one },
   list: { gap: Spacing.two },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  linkRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+  },
   checkCircle: {
     width: 24,
     height: 24,

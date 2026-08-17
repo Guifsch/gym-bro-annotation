@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const nome = z.string().trim().min(1).max(120);
-const descricao = z.string().trim().max(500).optional();
+const exercicioNome = z.string().trim().min(1).max(50);
+const descricao = z.string().trim().max(200).optional();
 const videoUrl = z.string().trim().max(500).optional();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
@@ -17,7 +18,7 @@ export const updateCategoriaSchema = z.object({
 
 export const createExercicioSchema = z.object({
   id: uuid,
-  nome,
+  nome: exercicioNome,
   descricao,
   categoriaId: uuid,
   sets: z.number().int().min(0).max(50),
@@ -28,7 +29,7 @@ export const createExercicioSchema = z.object({
 });
 
 export const updateExercicioSchema = z.object({
-  nome: nome.optional(),
+  nome: exercicioNome.optional(),
   descricao,
   categoriaId: uuid.optional(),
   sets: z.number().int().min(0).max(50).optional(),

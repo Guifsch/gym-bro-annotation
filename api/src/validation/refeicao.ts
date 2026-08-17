@@ -11,7 +11,7 @@ const refeicaoItem = z.object({
 const refeicaoBloco = z.object({
   id: uuid,
   nome: z.string().trim().min(1).max(120),
-  horario: z.string().trim().max(20).optional(),
+  horario: z.string().trim().max(5).optional(),
   itens: z.array(refeicaoItem).max(30).optional(),
 });
 

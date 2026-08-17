@@ -12,7 +12,7 @@ const refeicaoBlocoSchema = new Schema(
   {
     _id: { type: String, required: true },
     nome: { type: String, required: true, trim: true, maxlength: 120 },
-    horario: { type: String, trim: true, maxlength: 20 },
+    horario: { type: String, trim: true, maxlength: 5 },
     itens: { type: [refeicaoItemSchema], default: [] },
   },
   { _id: false }

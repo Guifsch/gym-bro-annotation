@@ -84,7 +84,7 @@ export default function AlimentacaoListScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
           <Card style={styles.formCard}>
             <LabeledTextField
-              placeholder="Nome da refeição (ex: Plano de terça, Refeição A)"
+              placeholder="Nome da refeição (ex: Plano de terça)"
               value={newNome}
               onChangeText={setNewNome}
               maxLength={120}
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   formCard: { gap: Spacing.two },
-  nomeInput: { paddingVertical: Spacing.three },
+  nomeInput: { minHeight: 56, paddingVertical: Spacing.four },
   list: { gap: Spacing.two },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   deleteButton: { padding: Spacing.one },

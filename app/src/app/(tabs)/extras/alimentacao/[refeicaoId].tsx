@@ -27,6 +27,7 @@ import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Refeicao, RefeicaoBloco, RefeicaoItem } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
+import { formatTimeInput } from '@/utils/time';
 
 function toItemParams(item: RefeicaoItem): RefeicaoItemParams {
   return { id: item._id, nome: item.nome };
@@ -338,7 +339,13 @@ export default function RefeicaoEditorScreen() {
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <LabeledTextField placeholder="Horário" value={novoBlocoHorario} onChangeText={setNovoBlocoHorario} maxLength={20} />
+                <LabeledTextField
+                  placeholder="Horário"
+                  value={novoBlocoHorario}
+                  onChangeText={(text) => setNovoBlocoHorario(formatTimeInput(text))}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                />
               </View>
             </View>
             <GradientButton title="Criar bloco" onPress={handleAddBloco} loading={creatingBloco} disabled={!novoBlocoNome.trim()} />

@@ -92,7 +92,7 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
             value={setsText}
             onChangeText={setSetsText}
             keyboardType="number-pad"
-            maxLength={3}
+            maxLength={2}
             style={fieldStyle}
           />
         </View>
@@ -104,7 +104,7 @@ export function ExercicioEntryEditor({ nome, sets, reps, pesoKg, onSaveFields }:
             value={repsText}
             onChangeText={setRepsText}
             keyboardType="number-pad"
-            maxLength={4}
+            maxLength={3}
             style={fieldStyle}
           />
         </View>

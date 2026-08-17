@@ -76,6 +76,22 @@ export default function ExerciciosListaScreen() {
 
   const editingExercicio = useMemo(() => exercicios.find((e) => e._id === editingId) ?? null, [exercicios, editingId]);
 
+  const gruposPorCategoria = useMemo(() => {
+    const map = new Map<string, Exercicio[]>();
+    for (const exercicio of exercicios) {
+      const arr = map.get(exercicio.categoriaId) ?? [];
+      arr.push(exercicio);
+      map.set(exercicio.categoriaId, arr);
+    }
+    return Array.from(map.entries())
+      .map(([categoriaId, exerciciosDaCategoria]) => ({
+        categoriaId,
+        nome: categoriaNomeById[categoriaId] ?? 'Categoria removida',
+        exercicios: exerciciosDaCategoria,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [exercicios, categoriaNomeById]);
+
   async function handleUploadImagem(uri: string, contentType: string) {
     if (!editingId) return;
     const updated = await uploadExercicioImagem(editingId, uri, contentType);
@@ -202,12 +218,12 @@ export default function ExerciciosListaScreen() {
             />
           ) : (
           <Card style={styles.formCard}>
-            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={120} />
+            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
             <LabeledTextField
               label="Descrição (opcional)"
               value={descricao}
               onChangeText={setDescricao}
-              maxLength={500}
+              maxLength={200}
               multiline
               numberOfLines={3}
               style={styles.multiline}
@@ -220,7 +236,7 @@ export default function ExerciciosListaScreen() {
                   value={setsText}
                   onChangeText={setSetsText}
                   keyboardType="number-pad"
-                  maxLength={3}
+                  maxLength={2}
                 />
               </View>
               <View style={styles.field}>
@@ -229,7 +245,7 @@ export default function ExerciciosListaScreen() {
                   value={repsText}
                   onChangeText={setRepsText}
                   keyboardType="number-pad"
-                  maxLength={4}
+                  maxLength={3}
                 />
               </View>
               <View style={styles.field}>
@@ -326,25 +342,36 @@ export default function ExerciciosListaScreen() {
               {!loading && exercicios.length === 0 ? (
                 <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
               ) : (
-                <View style={styles.list}>
-                  {exercicios.map((item) => (
-                    <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                      <Pressable onPress={() => startEditing(item)}>
-                        <Card style={styles.itemRow}>
-                          <CategoryIcon nome={categoriaNomeById[item.categoriaId] ?? ''} />
-                          <View style={{ flex: 1 }}>
-                            <ThemedText type="smallBold">{item.nome}</ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {categoriaNomeById[item.categoriaId] ?? 'Categoria'} · {item.sets}x{item.reps} ·{' '}
-                              {item.pesoKg}kg
-                            </ThemedText>
-                          </View>
-                          <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                            <Ionicons name="trash-outline" size={18} color="#e53935" />
-                          </Pressable>
-                        </Card>
-                      </Pressable>
-                    </SwipeableRow>
+                <View style={styles.groupsWrap}>
+                  {gruposPorCategoria.map((grupo) => (
+                    <View key={grupo.categoriaId} style={styles.grupo}>
+                      <View style={styles.grupoHeader}>
+                        <CategoryIcon nome={grupo.nome} size={16} />
+                        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
+                          {grupo.nome.toUpperCase()}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.list}>
+                        {grupo.exercicios.map((item) => (
+                          <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
+                            <Pressable onPress={() => startEditing(item)}>
+                              <Card style={styles.itemRow}>
+                                <CategoryIcon nome={grupo.nome} />
+                                <View style={{ flex: 1 }}>
+                                  <ThemedText type="smallBold">{item.nome}</ThemedText>
+                                  <ThemedText type="small" themeColor="textSecondary">
+                                    {item.sets}x{item.reps} · {item.pesoKg}kg
+                                  </ThemedText>
+                                </View>
+                                <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                                  <Ionicons name="trash-outline" size={18} color="#e53935" />
+                                </Pressable>
+                              </Card>
+                            </Pressable>
+                          </SwipeableRow>
+                        ))}
+                      </View>
+                    </View>
                   ))}
                 </View>
               )}
@@ -380,4 +407,8 @@ const styles = StyleSheet.create({
   list: { gap: Spacing.two },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   deleteButton: { padding: Spacing.one },
+  groupsWrap: { gap: Spacing.four },
+  grupo: { gap: Spacing.two },
+  grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
+  grupoTitle: { letterSpacing: 0.5 },
 });

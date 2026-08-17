@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
-import { createCategoria, deleteCategoria, listCategorias, updateCategoria } from '@/api/workoutApi';
+import {
+  createCategoria,
+  deleteCategoria,
+  deleteExercicio,
+  listCategorias,
+  listExercicios,
+  updateCategoria,
+} from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
@@ -18,10 +25,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
-import type { Categoria } from '@/types/workout';
+import type { Categoria, Exercicio } from '@/types/workout';
 
 export default function CategoriasScreen() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [exercicios, setExercicios] = useState<Exercicio[]>([]);
   const [loading, setLoading] = useState(true);
   const [novoNome, setNovoNome] = useState('');
   const [creating, setCreating] = useState(false);
@@ -31,7 +39,9 @@ export default function CategoriasScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setCategorias(await listCategorias());
+      const [categoriasData, exerciciosData] = await Promise.all([listCategorias(), listExercicios()]);
+      setCategorias(categoriasData);
+      setExercicios(exerciciosData);
     } finally {
       setLoading(false);
     }
@@ -42,6 +52,33 @@ export default function CategoriasScreen() {
       load();
     }, [load])
   );
+
+  const exerciciosPorCategoria = useMemo(() => {
+    const map = new Map<string, Exercicio[]>();
+    for (const exercicio of exercicios) {
+      const arr = map.get(exercicio.categoriaId) ?? [];
+      arr.push(exercicio);
+      map.set(exercicio.categoriaId, arr);
+    }
+    return map;
+  }, [exercicios]);
+
+  async function performDeleteExercicio(exercicio: Exercicio) {
+    try {
+      await deleteExercicio(exercicio._id);
+      setExercicios((prev) => prev.filter((e) => e._id !== exercicio._id));
+      showToast('Excluído');
+    } catch {
+      Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
+    }
+  }
+
+  function handleDeleteExercicio(exercicio: Exercicio) {
+    Alert.alert('Excluir exercício?', 'Essa ação não pode ser desfeita.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: () => performDeleteExercicio(exercicio) },
+    ]);
+  }
 
   async function handleCreate() {
     const nome = novoNome.trim();
@@ -112,33 +149,59 @@ export default function CategoriasScreen() {
             <EmptyState icon="pricetags-outline" title="Nenhuma categoria ainda." />
           ) : (
             <View style={styles.list}>
-              {categorias.map((item) =>
-                editingId === item._id ? (
-                  <Card key={item._id} style={styles.editRow}>
-                    <View style={{ flex: 1 }}>
-                      <LabeledTextField value={editingNome} onChangeText={setEditingNome} autoFocus maxLength={120} />
-                    </View>
-                    <Pressable onPress={handleSaveEdit} hitSlop={8}>
-                      <ThemedText type="linkPrimary">salvar</ThemedText>
-                    </Pressable>
-                    <Pressable onPress={() => setEditingId(null)} hitSlop={8}>
-                      <ThemedText type="small">cancelar</ThemedText>
-                    </Pressable>
-                  </Card>
-                ) : (
-                  <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                    <Pressable onPress={() => startEditing(item)}>
-                      <Card style={styles.row}>
-                        <CategoryIcon nome={item.nome} />
-                        <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
-                        <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                          <Ionicons name="trash-outline" size={18} color="#e53935" />
+              {categorias.map((item) => {
+                const exerciciosDaCategoria = exerciciosPorCategoria.get(item._id) ?? [];
+                return (
+                  <View key={item._id} style={styles.categoriaBlock}>
+                    {editingId === item._id ? (
+                      <Card style={styles.editRow}>
+                        <View style={{ flex: 1 }}>
+                          <LabeledTextField value={editingNome} onChangeText={setEditingNome} autoFocus maxLength={120} />
+                        </View>
+                        <Pressable onPress={handleSaveEdit} hitSlop={8}>
+                          <ThemedText type="linkPrimary">salvar</ThemedText>
+                        </Pressable>
+                        <Pressable onPress={() => setEditingId(null)} hitSlop={8}>
+                          <ThemedText type="small">cancelar</ThemedText>
                         </Pressable>
                       </Card>
-                    </Pressable>
-                  </SwipeableRow>
-                )
-              )}
+                    ) : (
+                      <SwipeableRow onDelete={() => handleDelete(item)}>
+                        <Pressable onPress={() => startEditing(item)}>
+                          <Card style={styles.row}>
+                            <CategoryIcon nome={item.nome} />
+                            <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
+                            <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                              <Ionicons name="trash-outline" size={18} color="#e53935" />
+                            </Pressable>
+                          </Card>
+                        </Pressable>
+                      </SwipeableRow>
+                    )}
+
+                    {exerciciosDaCategoria.length > 0 && (
+                      <View style={styles.exerciciosList}>
+                        {exerciciosDaCategoria.map((exercicio) => (
+                          <View key={exercicio._id} style={styles.exercicioRow}>
+                            <ThemedText type="small" style={{ flex: 1 }}>
+                              {exercicio.nome}
+                            </ThemedText>
+                            <ThemedText type="small" themeColor="textSecondary">
+                              {exercicio.sets}x{exercicio.reps} · {exercicio.pesoKg}kg
+                            </ThemedText>
+                            <Pressable
+                              onPress={() => handleDeleteExercicio(exercicio)}
+                              hitSlop={8}
+                              style={styles.deleteButton}>
+                              <Ionicons name="trash-outline" size={16} color="#e53935" />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           )}
         </ScrollView>
@@ -152,8 +215,11 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   formCard: { gap: Spacing.two },
-  list: { gap: Spacing.two },
+  list: { gap: Spacing.three },
+  categoriaBlock: { gap: Spacing.one },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   editRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   deleteButton: { padding: Spacing.one },
+  exerciciosList: { gap: Spacing.half, paddingLeft: Spacing.five },
+  exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.half },
 });

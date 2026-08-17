@@ -1,9 +1,11 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
+import { formatZodError } from '../utils/zodError';
+
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof ZodError) {
-    res.status(400).json({ error: 'Validation error', issues: err.issues });
+    res.status(400).json({ error: formatZodError(err), issues: err.issues });
     return;
   }
 

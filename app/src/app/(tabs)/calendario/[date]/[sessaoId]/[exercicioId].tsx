@@ -171,13 +171,13 @@ export default function ExercicioDetalheScreen() {
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Card style={styles.nameCard}>
-            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} onBlur={handleSaveNome} maxLength={120} />
+            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} onBlur={handleSaveNome} maxLength={50} />
             <LabeledTextField
               label="Descrição (opcional)"
               value={descricao}
               onChangeText={setDescricao}
               onBlur={handleSaveDescricao}
-              maxLength={500}
+              maxLength={200}
               multiline
               numberOfLines={3}
               style={styles.multiline}
