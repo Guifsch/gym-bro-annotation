@@ -184,7 +184,7 @@ export default function CategoriasScreen() {
                       <View style={styles.exerciciosList}>
                         {exerciciosDaCategoria.map((exercicio) => (
                           <View key={exercicio._id} style={styles.exercicioRow}>
-                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={item.nome} size={14} />
+                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={item.nome} size={22} />
                             <ThemedText type="small" style={{ flex: 1 }}>
                               {exercicio.nome}
                             </ThemedText>

@@ -73,7 +73,7 @@ export function ExercicioCoverPhoto({ capa, onUpload, onDelete }: ExercicioCover
   return (
     <Pressable onPress={handlePress} disabled={uploading} style={styles.wrap}>
       {capa ? (
-        <Image source={{ uri: capa.url }} style={styles.photo} resizeMode="cover" />
+        <Image source={{ uri: capa.url }} style={styles.photo} resizeMode="contain" />
       ) : (
         <View style={[styles.placeholder, { borderColor: theme.border }]}>
           {uploading ? (

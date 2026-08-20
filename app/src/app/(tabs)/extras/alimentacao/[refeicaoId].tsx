@@ -26,7 +26,7 @@ import { showToast } from '@/components/toast';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Refeicao, RefeicaoBloco, RefeicaoItem } from '@/types/workout';
-import { formatDateDisplay } from '@/utils/date';
+import { formatRefeicaoDates } from '@/utils/refeicao';
 import { formatTimeInput } from '@/utils/time';
 
 function toItemParams(item: RefeicaoItem): RefeicaoItemParams {
@@ -230,33 +230,16 @@ export default function RefeicaoEditorScreen() {
           </Card>
 
           <Card style={styles.dateCard}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Dias vinculados
+            <ThemedText type="small" themeColor="textSecondary">
+              Dias vinculados
+            </ThemedText>
+            <Pressable onPress={() => setDatePickerVisible(true)} style={styles.dateSummaryRow}>
+              <Ionicons name="calendar-outline" size={18} color={Brand.primary} />
+              <ThemedText type="smallBold" style={{ flex: 1 }}>
+                {refeicao.dates.length === 0 ? 'Nenhum dia vinculado' : formatRefeicaoDates(refeicao.dates)}
               </ThemedText>
-              <Pressable onPress={() => setDatePickerVisible(true)} hitSlop={8}>
-                <Ionicons name="add-circle-outline" size={20} color={Brand.primary} />
-              </Pressable>
-            </View>
-            {refeicao.dates.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Nenhum dia vinculado
-              </ThemedText>
-            ) : (
-              <View style={styles.chipRow}>
-                {refeicao.dates
-                  .slice()
-                  .sort()
-                  .map((date) => (
-                    <View key={date} style={[styles.dateChip, { borderColor: theme.border }]}>
-                      <ThemedText type="small">{formatDateDisplay(date)}</ThemedText>
-                      <Pressable onPress={() => handleToggleDate(date)} hitSlop={8}>
-                        <Ionicons name="close" size={14} color={theme.textSecondary} />
-                      </Pressable>
-                    </View>
-                  ))}
-              </View>
-            )}
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </Pressable>
           </Card>
 
           <ThemedText type="smallBold">Blocos (opcional)</ThemedText>
@@ -386,18 +369,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dateCard: { gap: Spacing.two },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  dateChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-    borderWidth: 1,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-  },
+  dateSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   list: { gap: Spacing.two },
   deleteButton: { padding: Spacing.one },
   blocoCard: { gap: Spacing.two },

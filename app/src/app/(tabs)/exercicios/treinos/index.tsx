@@ -86,7 +86,7 @@ export default function TreinosListScreen() {
               placeholder="Nome do novo treino"
               value={newNome}
               onChangeText={setNewNome}
-              maxLength={120}
+              maxLength={50}
             />
             <GradientButton title="Criar treino" onPress={handleCreate} loading={creating} disabled={!newNome.trim()} />
           </Card>

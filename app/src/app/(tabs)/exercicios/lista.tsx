@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
@@ -20,14 +20,17 @@ import {
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
+import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
+import type { LogFields } from '@/components/exercicio-entry-editor';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { PercentualTable } from '@/components/percentual-table';
+import { QuickEntryInline } from '@/components/quick-entry-inline';
 import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,6 +38,7 @@ import { showToast } from '@/components/toast';
 import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useCategoryScroll } from '@/hooks/useCategoryScroll';
 import type { Categoria, Exercicio } from '@/types/workout';
 
 export default function ExerciciosListaScreen() {
@@ -55,6 +59,10 @@ export default function ExerciciosListaScreen() {
   const [cargaMaximaText, setCargaMaximaText] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
 
+  const [stagedCapa, setStagedCapa] = useState<{ uri: string; contentType: string } | null>(null);
+  const [stagedImagens, setStagedImagens] = useState<{ uri: string; contentType: string }[]>([]);
+  const [stagedVideoUrls, setStagedVideoUrls] = useState<string[]>([]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -72,12 +80,25 @@ export default function ExerciciosListaScreen() {
     }, [load])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!creating && !editingId) return false;
+        resetForm();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [creating, editingId])
+  );
+
   const categoriaNomeById = useMemo(
     () => Object.fromEntries(categorias.map((c) => [c._id, c.nome])),
     [categorias]
   );
 
   const editingExercicio = useMemo(() => exercicios.find((e) => e._id === editingId) ?? null, [exercicios, editingId]);
+
+  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
 
   const gruposPorCategoria = useMemo(() => {
     const map = new Map<string, Exercicio[]>();
@@ -96,7 +117,10 @@ export default function ExerciciosListaScreen() {
   }, [exercicios, categoriaNomeById]);
 
   async function handleUploadImagem(uri: string, contentType: string) {
-    if (!editingId) return;
+    if (!editingId) {
+      setStagedImagens((prev) => (prev.length >= 5 ? prev : [...prev, { uri, contentType }]));
+      return;
+    }
     try {
       const updated = await uploadExercicioImagem(editingId, uri, contentType);
       setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
@@ -107,7 +131,10 @@ export default function ExerciciosListaScreen() {
   }
 
   async function handleDeleteImagem(key: string) {
-    if (!editingId) return;
+    if (!editingId) {
+      setStagedImagens((prev) => prev.filter((s) => s.uri !== key));
+      return;
+    }
     try {
       const updated = await deleteExercicioImagem(editingId, key);
       setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
@@ -118,7 +145,10 @@ export default function ExerciciosListaScreen() {
   }
 
   async function handleUploadCapa(uri: string, contentType: string) {
-    if (!editingId) return;
+    if (!editingId) {
+      setStagedCapa({ uri, contentType });
+      return;
+    }
     try {
       const updated = await uploadExercicioCapa(editingId, uri, contentType);
       setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
@@ -129,7 +159,10 @@ export default function ExerciciosListaScreen() {
   }
 
   async function handleDeleteCapa() {
-    if (!editingId) return;
+    if (!editingId) {
+      setStagedCapa(null);
+      return;
+    }
     try {
       const updated = await deleteExercicioCapa(editingId);
       setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
@@ -140,7 +173,11 @@ export default function ExerciciosListaScreen() {
   }
 
   async function handleAddVideo(url: string) {
-    if (!editingId || !editingExercicio) return;
+    if (!editingId) {
+      setStagedVideoUrls((prev) => [...prev, url]);
+      return;
+    }
+    if (!editingExercicio) return;
     try {
       const videoUrls = [...editingExercicio.videoUrls, url];
       const updated = await updateExercicio(editingId, { videoUrls });
@@ -152,7 +189,11 @@ export default function ExerciciosListaScreen() {
   }
 
   async function handleRemoveVideo(url: string) {
-    if (!editingId || !editingExercicio) return;
+    if (!editingId) {
+      setStagedVideoUrls((prev) => prev.filter((v) => v !== url));
+      return;
+    }
+    if (!editingExercicio) return;
     try {
       const videoUrls = editingExercicio.videoUrls.filter((v) => v !== url);
       const updated = await updateExercicio(editingId, { videoUrls });
@@ -173,6 +214,9 @@ export default function ExerciciosListaScreen() {
     setPesoText('');
     setCargaMaximaText('');
     setCategoriaId(null);
+    setStagedCapa(null);
+    setStagedImagens([]);
+    setStagedVideoUrls([]);
   }
 
   function startEditing(exercicio: Exercicio) {
@@ -184,6 +228,15 @@ export default function ExerciciosListaScreen() {
     setPesoText(String(exercicio.pesoKg));
     setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
     setCategoriaId(exercicio.categoriaId);
+  }
+
+  async function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
+    try {
+      const updated = await updateExercicio(exercicio._id, fields);
+      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    }
   }
 
   async function handleSave() {
@@ -224,10 +277,31 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
+          videoUrls: stagedVideoUrls.length ? stagedVideoUrls : undefined,
         });
         setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
         setCreating(false);
         setEditingId(created._id);
+
+        let current = created;
+        try {
+          if (stagedCapa) {
+            current = await uploadExercicioCapa(current._id, stagedCapa.uri, stagedCapa.contentType);
+            setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
+          }
+          for (const imagem of stagedImagens) {
+            current = await uploadExercicioImagem(current._id, imagem.uri, imagem.contentType);
+            setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
+          }
+        } catch (err) {
+          Alert.alert(
+            'Exercício criado, mas houve um problema ao enviar as fotos',
+            getApiErrorMessage(err, 'Tente enviar novamente na edição.')
+          );
+        }
+        setStagedCapa(null);
+        setStagedImagens([]);
+        setStagedVideoUrls([]);
       }
       showToast('Salvo');
     } catch (err) {
@@ -262,7 +336,7 @@ export default function ExerciciosListaScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Exercícios" />
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {!creating && !editingId ? (
             <GradientButton
               title="Criar exercício"
@@ -271,8 +345,12 @@ export default function ExerciciosListaScreen() {
             />
           ) : (
           <>
-          {editingExercicio && (
-            <ExercicioCoverPhoto capa={editingExercicio.capa} onUpload={handleUploadCapa} onDelete={handleDeleteCapa} />
+          {(creating || editingExercicio) && (
+            <ExercicioCoverPhoto
+              capa={editingExercicio?.capa ?? (stagedCapa ? { url: stagedCapa.uri, key: 'staged-capa' } : undefined)}
+              onUpload={handleUploadCapa}
+              onDelete={handleDeleteCapa}
+            />
           )}
           <Card style={styles.formCard}>
             <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
@@ -327,20 +405,24 @@ export default function ExerciciosListaScreen() {
               </View>
             </View>
 
-            {editingExercicio && (
+            {(creating || editingExercicio) && (
               <View style={styles.photoSection}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Fotos
                 </ThemedText>
                 <ExercicioImageGallery
-                  imagens={editingExercicio.imagens ?? []}
+                  imagens={editingExercicio?.imagens ?? stagedImagens.map((s) => ({ url: s.uri, key: s.uri }))}
                   onUpload={handleUploadImagem}
                   onDelete={handleDeleteImagem}
                 />
                 <ThemedText type="small" themeColor="textSecondary">
                   Vídeos
                 </ThemedText>
-                <VideoLinkGallery videos={editingExercicio.videoUrls} onAdd={handleAddVideo} onRemove={handleRemoveVideo} />
+                <VideoLinkGallery
+                  videos={editingExercicio?.videoUrls ?? stagedVideoUrls}
+                  onAdd={handleAddVideo}
+                  onRemove={handleRemoveVideo}
+                />
               </View>
             )}
 
@@ -403,9 +485,14 @@ export default function ExerciciosListaScreen() {
               {!loading && exercicios.length === 0 ? (
                 <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
               ) : (
-                <View style={styles.groupsWrap}>
+                <>
+                  <CategoryJumpBar
+                    categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
+                    onSelect={scrollToGroup}
+                  />
+                  <View style={styles.groupsWrap}>
                   {gruposPorCategoria.map((grupo) => (
-                    <View key={grupo.categoriaId} style={styles.grupo}>
+                    <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
                       <View style={styles.grupoHeader}>
                         <CategoryIcon nome={grupo.nome} size={16} />
                         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
@@ -415,26 +502,30 @@ export default function ExerciciosListaScreen() {
                       <View style={styles.list}>
                         {grupo.exercicios.map((item) => (
                           <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                            <Pressable onPress={() => startEditing(item)}>
-                              <Card style={styles.itemRow}>
-                                <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} />
-                                <View style={{ flex: 1 }}>
-                                  <ThemedText type="smallBold">{item.nome}</ThemedText>
-                                  <ThemedText type="small" themeColor="textSecondary">
-                                    {item.sets}x{item.reps} · {item.pesoKg}kg
-                                  </ThemedText>
-                                </View>
-                                <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                                  <Ionicons name="trash-outline" size={18} color="#e53935" />
-                                </Pressable>
-                              </Card>
-                            </Pressable>
+                            <View style={styles.itemWrap}>
+                              <Pressable onPress={() => startEditing(item)}>
+                                <Card style={styles.itemRow}>
+                                  <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} size={32} />
+                                  <View style={{ flex: 1 }}>
+                                    <ThemedText type="smallBold">{item.nome}</ThemedText>
+                                    <ThemedText type="small" themeColor="textSecondary">
+                                      {item.sets}x{item.reps} · {item.pesoKg}kg
+                                    </ThemedText>
+                                  </View>
+                                  <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                                    <Ionicons name="trash-outline" size={18} color="#e53935" />
+                                  </Pressable>
+                                </Card>
+                              </Pressable>
+                              <QuickEntryInline onSaveFields={(fields) => handleQuickUpdate(item, fields)} />
+                            </View>
                           </SwipeableRow>
                         ))}
                       </View>
                     </View>
                   ))}
-                </View>
+                  </View>
+                </>
               )}
             </>
           )}
@@ -466,6 +557,7 @@ const styles = StyleSheet.create({
   secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.five },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   list: { gap: Spacing.two },
+  itemWrap: { gap: Spacing.one },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   deleteButton: { padding: Spacing.one },
   groupsWrap: { gap: Spacing.four },

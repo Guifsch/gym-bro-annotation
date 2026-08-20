@@ -3,16 +3,20 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getSessao, getTreino, listCategorias, listExercicios } from '@/api/workoutApi';
+import { type UpsertEntryParams, getSessao, getTreino, listCategorias, listExercicios } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { EmptyState } from '@/components/empty-state';
+import type { LogFields } from '@/components/exercicio-entry-editor';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { LoadingView } from '@/components/loading-view';
+import { QuickEntryInline } from '@/components/quick-entry-inline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
+import { enqueueUpsertSessaoEntry } from '@/offline/queue';
 import type { Categoria, Exercicio, Sessao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
 
@@ -69,6 +73,14 @@ export default function SessaoDetalheScreen() {
     }));
   }, [treino, exercicioById, categoriaNomeById]);
 
+  function handleSaveFields(exercicio: Exercicio, fields: LogFields) {
+    if (!sessao || Object.keys(fields).length === 0) return;
+
+    const params: UpsertEntryParams = { sessaoId: sessao._id, exercicioId: exercicio._id, ...fields };
+    setSessao((current) => (current ? mergeSessaoEntry(current, exercicio, params) : current));
+    void enqueueUpsertSessaoEntry(params);
+  }
+
   if (notFound) {
     return (
       <ThemedView style={styles.container}>
@@ -121,19 +133,21 @@ export default function SessaoDetalheScreen() {
                     const reps = entry?.reps ?? exercicio.reps;
                     const pesoKg = entry?.pesoKg ?? exercicio.pesoKg;
                     return (
-                      <Pressable
-                        key={exercicio._id}
-                        onPress={() => router.push(`/(tabs)/calendario/${date}/${sessaoId}/${exercicio._id}`)}>
-                        <Card style={styles.exercicioRow}>
-                          <ExercicioThumbnail exercicio={exercicio} categoriaNome={grupo.nome} size={18} />
-                          <View style={styles.exercicioText}>
-                            <ThemedText type="smallBold">{exercicio.nome}</ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {sets}x{reps} · {pesoKg}kg
-                            </ThemedText>
-                          </View>
-                        </Card>
-                      </Pressable>
+                      <View key={exercicio._id} style={styles.exercicioWrap}>
+                        <Pressable
+                          onPress={() => router.push(`/(tabs)/calendario/${date}/${sessaoId}/${exercicio._id}`)}>
+                          <Card style={styles.exercicioRow}>
+                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={grupo.nome} size={30} />
+                            <View style={styles.exercicioText}>
+                              <ThemedText type="smallBold">{exercicio.nome}</ThemedText>
+                              <ThemedText type="small" themeColor="textSecondary">
+                                {sets}x{reps} · {pesoKg}kg
+                              </ThemedText>
+                            </View>
+                          </Card>
+                        </Pressable>
+                        <QuickEntryInline onSaveFields={(fields) => handleSaveFields(exercicio, fields)} />
+                      </View>
                     );
                   })}
                 </View>
@@ -154,6 +168,7 @@ const styles = StyleSheet.create({
   grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
   grupoTitle: { letterSpacing: 0.5 },
   exerciciosList: { gap: Spacing.two },
+  exercicioWrap: { gap: Spacing.one },
   exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   exercicioText: { flex: 1, gap: 2 },
 });

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const nome = z.string().trim().min(1).max(120);
+const treinoNome = z.string().trim().min(1).max(50);
 const exercicioNome = z.string().trim().min(1).max(50);
 const descricao = z.string().trim().max(200).optional();
 const videoUrls = z.array(z.string().trim().max(500)).max(5).optional();
@@ -41,11 +42,11 @@ export const updateExercicioSchema = z.object({
 
 export const createTreinoSchema = z.object({
   id: uuid,
-  nome,
+  nome: treinoNome,
 });
 
 export const updateTreinoSchema = z.object({
-  nome: nome.optional(),
+  nome: treinoNome.optional(),
   exercicioIds: z.array(uuid).max(100).optional(),
 });
 

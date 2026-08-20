@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteTreino, getTreino, listCategorias, listExercicios, updateTreino } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
+import { CategoryIcon } from '@/components/category-icon';
+import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
@@ -17,6 +19,7 @@ import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useCategoryScroll } from '@/hooks/useCategoryScroll';
 import type { Categoria, Exercicio, Treino } from '@/types/workout';
 
 export default function TreinoEditorScreen() {
@@ -49,10 +52,28 @@ export default function TreinoEditorScreen() {
     }, [load])
   );
 
+  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
+
   const categoriaNomeById = useMemo(
     () => Object.fromEntries(categorias.map((c) => [c._id, c.nome])),
     [categorias]
   );
+
+  const gruposPorCategoria = useMemo(() => {
+    const map = new Map<string, Exercicio[]>();
+    for (const exercicio of exercicios) {
+      const arr = map.get(exercicio.categoriaId) ?? [];
+      arr.push(exercicio);
+      map.set(exercicio.categoriaId, arr);
+    }
+    return Array.from(map.entries())
+      .map(([categoriaId, exerciciosDaCategoria]) => ({
+        categoriaId,
+        nome: categoriaNomeById[categoriaId] ?? 'Categoria removida',
+        exercicios: exerciciosDaCategoria,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [exercicios, categoriaNomeById]);
 
   async function handleSaveNome() {
     setSavingNome(true);
@@ -108,10 +129,10 @@ export default function TreinoEditorScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Editar treino" />
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Card style={styles.row}>
             <View style={{ flex: 1 }}>
-              <LabeledTextField label="Nome do treino" value={nome} onChangeText={setNome} maxLength={120} />
+              <LabeledTextField label="Nome do treino" value={nome} onChangeText={setNome} maxLength={50} />
             </View>
             <GradientButton title="Salvar" onPress={handleSaveNome} loading={savingNome} disabled={!nome.trim()} />
           </Card>
@@ -121,35 +142,48 @@ export default function TreinoEditorScreen() {
             Toque para vincular ou desvincular deste treino.
           </ThemedText>
 
+          <CategoryJumpBar
+            categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
+            onSelect={scrollToGroup}
+          />
+
           {exercicios.length === 0 ? (
             <EmptyState icon="barbell-outline" title="Nenhum exercício cadastrado ainda (crie na tab Exercícios)." />
           ) : (
-            <View style={styles.list}>
-              {exercicios.map((item) => {
-                const linked = treino.exercicioIds.includes(item._id);
-                const categoriaNome = categoriaNomeById[item.categoriaId] ?? 'Categoria';
-                return (
-                  <Pressable key={item._id} onPress={() => handleToggleExercicio(item._id)}>
-                    <Card style={[styles.exercicioRow, linked && { borderColor: Brand.primary, borderWidth: 2 }]}>
-                      <ExercicioThumbnail exercicio={item} categoriaNome={categoriaNome} />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText type="smallBold">{item.nome}</ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
-                          {categoriaNome}
-                        </ThemedText>
-                      </View>
-                      <View
-                        style={[
-                          styles.checkCircle,
-                          { borderColor: linked ? Brand.primary : theme.border },
-                          linked && { backgroundColor: Brand.primary },
-                        ]}>
-                        {linked && <Ionicons name="checkmark" size={14} color="#fff" />}
-                      </View>
-                    </Card>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.groupsWrap}>
+              {gruposPorCategoria.map((grupo) => (
+                <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
+                  <View style={styles.grupoHeader}>
+                    <CategoryIcon nome={grupo.nome} size={16} />
+                    <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
+                      {grupo.nome.toUpperCase()}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.list}>
+                    {grupo.exercicios.map((item) => {
+                      const linked = treino.exercicioIds.includes(item._id);
+                      return (
+                        <Pressable key={item._id} onPress={() => handleToggleExercicio(item._id)}>
+                          <Card style={[styles.exercicioRow, linked && { borderColor: Brand.primary, borderWidth: 1}]}>
+                            <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} size={30} />
+                            <View style={{ flex: 1 }}>
+                              <ThemedText type="smallBold">{item.nome}</ThemedText>
+                            </View>
+                            <View
+                              style={[
+                                styles.checkCircle,
+                                { borderColor: linked ? Brand.primary : theme.border },
+                                linked && { backgroundColor: Brand.primary },
+                              ]}>
+                              {linked && <Ionicons name="checkmark" size={14} color="#fff" />}
+                            </View>
+                          </Card>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
@@ -168,6 +202,10 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two },
+  groupsWrap: { gap: Spacing.four },
+  grupo: { gap: Spacing.two },
+  grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
+  grupoTitle: { letterSpacing: 0.5 },
   list: { gap: Spacing.two },
   exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   checkCircle: {

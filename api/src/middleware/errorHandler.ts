@@ -10,7 +10,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   if (err instanceof Error && err.name === 'MongoServerError' && 'code' in err && (err as { code?: number }).code === 11000) {
-    res.status(409).json({ error: 'Duplicate resource' });
+    res.status(409).json({ error: 'Já existe um item com esses dados' });
     return;
   }
 
