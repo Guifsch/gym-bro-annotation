@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, TextInput, View } from 'react-native';
 
@@ -162,39 +161,35 @@ export function InlineLogEditor({ sets, reps, pesoKg, onSaveFields }: InlineLogE
         </View>
       </View>
 
-      <View style={styles.quickRow}>
-        <Ionicons name="flash-outline" size={14} color={theme.textSecondary} />
-        <TextInput
-          value={quickText}
-          onChangeText={setQuickText}
-          onBlur={commitQuick}
-          onSubmitEditing={commitQuick}
-          placeholder="ex: 3s 10r 10k"
-          placeholderTextColor={theme.textSecondary}
-          style={[fieldStyle, styles.quickInput]}
-          returnKeyType="done"
-          maxLength={50}
-        />
-      </View>
+      <TextInput
+        value={quickText}
+        onChangeText={setQuickText}
+        onBlur={commitQuick}
+        onSubmitEditing={commitQuick}
+        placeholder="ex: 3s 10r 10k"
+        placeholderTextColor={theme.textSecondary}
+        style={[fieldStyle, styles.quickInput]}
+        returnKeyType="done"
+        maxLength={50}
+      />
       {quickError && <ThemedText style={styles.error}>{quickError}</ThemedText>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.one },
+  container: { gap: 3 },
   manualRow: { flexDirection: 'row', gap: Spacing.one },
-  manualField: { flex: 1, gap: 2 },
-  manualLabel: { fontSize: 11, lineHeight: 14 },
-  quickRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  manualField: { flex: 1, gap: 1 },
+  manualLabel: { fontSize: 11, lineHeight: 12 },
   fieldInput: {
     borderWidth: 1,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
+    paddingVertical: 1,
     fontSize: 13,
     textAlign: 'center',
   },
-  quickInput: { flex: 1, textAlign: 'left' },
+  quickInput: { textAlign: 'left' },
   error: { color: '#e53935' },
 });

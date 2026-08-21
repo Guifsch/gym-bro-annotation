@@ -122,7 +122,16 @@ export default function CalendarioScreen() {
         <Modal visible={legendAnchor !== null} transparent animationType="fade" onRequestClose={() => setLegendAnchor(null)}>
           <Pressable style={styles.legendBackdrop} onPress={() => setLegendAnchor(null)}>
             {legendAnchor && (
-              <Card style={[styles.legendCard, { top: legendAnchor.y + legendAnchor.height + 6, left: legendAnchor.x }]}>
+              <View
+                style={[
+                  styles.legendCard,
+                  {
+                    top: legendAnchor.y + legendAnchor.height + 6,
+                    left: legendAnchor.x,
+                    backgroundColor: theme.background,
+                    borderColor: theme.border,
+                  },
+                ]}>
                 <View style={styles.legendItem}>
                   <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={styles.legendSwatch} />
                   <ThemedText type="small">Hoje</ThemedText>
@@ -143,7 +152,7 @@ export default function CalendarioScreen() {
                   />
                   <ThemedText type="small">Presença</ThemedText>
                 </View>
-              </Card>
+              </View>
             )}
           </Pressable>
         </Modal>
@@ -212,7 +221,19 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   legendBackdrop: { flex: 1 },
-  legendCard: { position: 'absolute', gap: Spacing.two, minWidth: 170 },
+  legendCard: {
+    position: 'absolute',
+    gap: Spacing.two,
+    minWidth: 170,
+    padding: Spacing.three,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   legendSwatch: { width: 14, height: 14, borderRadius: 7 },
   legendSwatchOutline: { borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

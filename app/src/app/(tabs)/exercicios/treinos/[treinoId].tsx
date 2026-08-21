@@ -144,6 +144,13 @@ export default function TreinoEditorScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Editar treino" />
 
+        {gruposPorCategoria.length > 0 && (
+          <CategoryJumpBar
+            categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
+            onSelect={scrollToGroup}
+          />
+        )}
+
         <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Card style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -156,11 +163,6 @@ export default function TreinoEditorScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             Toque para vincular ou desvincular deste treino.
           </ThemedText>
-
-          <CategoryJumpBar
-            categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
-            onSelect={scrollToGroup}
-          />
 
           {exercicios.length === 0 ? (
             <EmptyState icon="barbell-outline" title="Nenhum exercício cadastrado ainda (crie na tab Exercícios)." />

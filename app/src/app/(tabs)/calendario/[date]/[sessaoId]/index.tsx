@@ -147,11 +147,12 @@ export default function SessaoDetalheScreen() {
             Este treino não tem exercícios vinculados ainda (edite em Exercícios &gt; Treinos).
           </ThemedText>
         ) : (
-          <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <>
             <CategoryJumpBar
               categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
               onSelect={scrollToGroup}
             />
+            <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {gruposPorCategoria.map((grupo) => (
               <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
                 <View style={styles.grupoHeader}>
@@ -208,7 +209,8 @@ export default function SessaoDetalheScreen() {
                 </View>
               </View>
             ))}
-          </ScrollView>
+            </ScrollView>
+          </>
         )}
       </SafeAreaView>
     </ThemedView>
@@ -218,13 +220,13 @@ export default function SessaoDetalheScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
-  scrollContent: { paddingBottom: Spacing.five, gap: Spacing.four },
-  grupo: { gap: Spacing.two },
+  scrollContent: { paddingBottom: Spacing.five, gap: Spacing.three },
+  grupo: { gap: Spacing.one },
   grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
   grupoTitle: { letterSpacing: 0.5 },
-  exerciciosList: { gap: Spacing.two },
-  exercicioWrap: { gap: Spacing.one },
-  exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  exerciciosList: { gap: Spacing.one },
+  exercicioWrap: { gap: 2 },
+  exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
   exercicioText: { flex: 1, gap: 2 },
   substitutoList: { gap: 2, marginTop: 2 },
   substitutoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

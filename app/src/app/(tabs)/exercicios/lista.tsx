@@ -389,6 +389,13 @@ export default function ExerciciosListaScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Exercícios" onBack={creating || editingId ? resetForm : undefined} />
 
+        {!creating && !editingId && gruposPorCategoria.length > 0 && (
+          <CategoryJumpBar
+            categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
+            onSelect={scrollToGroup}
+          />
+        )}
+
         <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {!creating && !editingId ? (
             <GradientButton
@@ -560,10 +567,6 @@ export default function ExerciciosListaScreen() {
                 <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
               ) : (
                 <>
-                  <CategoryJumpBar
-                    categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
-                    onSelect={scrollToGroup}
-                  />
                   <View style={styles.groupsWrap}>
                   {gruposPorCategoria.map((grupo) => (
                     <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
@@ -651,15 +654,15 @@ const styles = StyleSheet.create({
   actionsColumn: { gap: Spacing.two, marginTop: Spacing.one },
   secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.five },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
-  list: { gap: Spacing.two },
-  itemWrap: { gap: Spacing.one },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  list: { gap: Spacing.one },
+  itemWrap: { gap: 2 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
   substitutoList: { gap: 2, marginTop: 2 },
   substitutoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   substitutoText: { color: Brand.primary, textDecorationLine: 'underline' },
   deleteButton: { padding: Spacing.one },
-  groupsWrap: { gap: Spacing.four },
-  grupo: { gap: Spacing.two },
+  groupsWrap: { gap: Spacing.three },
+  grupo: { gap: Spacing.one },
   grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
   grupoTitle: { letterSpacing: 0.5 },
 });

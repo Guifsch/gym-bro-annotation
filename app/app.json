@@ -7,19 +7,22 @@
     "icon": "./assets/images/icon.png",
     "scheme": "app",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#15b580",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.app",
-      "permissions": ["POST_NOTIFICATIONS"]
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
+      ]
     },
     "web": {
       "output": "static",
@@ -30,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#15b580",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -42,7 +45,9 @@
           "cameraPermission": "Permita o acesso à câmera para fotografar o equipamento do exercício.",
           "photosPermission": "Permita o acesso às fotos para anexar uma imagem ao exercício."
         }
-      ]
+      ],
+      "./plugins/withNotifeeMavenRepo.js",
+      "./plugins/withNotifeeForegroundService.js"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,8 +1,19 @@
-import notifee, { AlarmType, AndroidCategory, AndroidImportance, EventType, TriggerType } from '@notifee/react-native';
+import notifee, {
+  AlarmType,
+  AndroidCategory,
+  AndroidImportance,
+  AndroidNotificationSetting,
+  EventType,
+  TriggerType,
+} from '@notifee/react-native';
 import { Platform, Vibration } from 'react-native';
 
 export const TIMER_NOTIFICATION_ID = 'rest-timer-alarm';
+export const RUNNING_NOTIFICATION_ID = 'rest-timer-running';
 export const SNOOZE_SECONDS = 60;
+// Android has no built-in cap on Vibration.vibrate(pattern, repeat: true) — without this, a
+// missed/ignored alarm buzzes forever until the app is reopened.
+const MAX_VIBRATION_MS = 30_000;
 
 const FOREGROUND_VIBRATION_UNIT = [0, 700, 400];
 
@@ -20,11 +31,15 @@ const NOTIFICATION_VIBRATION_PATTERN = buildLongVibrationPattern(20);
 // Android notification channels are immutable once created — bump this if the channel config
 // (vibration pattern, sound) ever changes again, otherwise devices that already created the old
 // channel silently keep the old behavior.
-const CHANNEL_VERSION = 'v1';
+const CHANNEL_VERSION = 'v2';
 
 function channelId(vibrar: boolean, som: boolean): string {
   return `timer-alarm-${CHANNEL_VERSION}-${vibrar ? 'vibrate' : 'novibrate'}-${som ? 'sound' : 'nosound'}`;
 }
+
+// Separate low-importance, silent channel for the "still running" indicator — it fires every time
+// a timer starts, so it must never itself buzz/ring (that's what the alarm channels above are for).
+const RUNNING_CHANNEL_ID = `timer-running-${CHANNEL_VERSION}`;
 
 let channelsReadyPromise: Promise<void> | null = null;
 async function ensureChannels(): Promise<void> {
@@ -43,6 +58,12 @@ async function ensureChannels(): Promise<void> {
           });
         }
       }
+      await notifee.createChannel({
+        id: RUNNING_CHANNEL_ID,
+        name: 'Timer em andamento',
+        importance: AndroidImportance.LOW,
+        vibration: false,
+      });
     })().catch((err) => {
       channelsReadyPromise = null; // let the next call retry instead of replaying this failure forever
       throw err;
@@ -61,8 +82,46 @@ export function setTimerAlarmPrefs(vibrar: boolean, som: boolean): void {
   currentSom = som;
 }
 
+/** `SET_ALARM_CLOCK` (used below so the alarm survives Doze/backgrounding) needs the
+ * "Alarms & reminders" special permission on Android 12+ — unlike POST_NOTIFICATIONS, there's no
+ * plain runtime dialog for it, only a system Settings screen. If it's off, the OS silently
+ * degrades or drops the exact trigger, which reads as "the timer sometimes just doesn't fire". */
+async function ensureAlarmPermission(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const settings = await notifee.getNotificationSettings();
+  if (settings.android.alarm !== AndroidNotificationSetting.ENABLED) {
+    await notifee.openAlarmPermissionSettings();
+  }
+}
+
+/** Ongoing, silent notification shown for the whole time a timer is running, with a native
+ * countdown chronometer — so the user can see it's still going from the notification shade
+ * without needing to reopen the app. Separate from the `TIMER_NOTIFICATION_ID` trigger below,
+ * which only fires once, at completion. */
+async function showRunningNotification(seconds: number): Promise<void> {
+  await notifee.displayNotification({
+    id: RUNNING_NOTIFICATION_ID,
+    title: 'Descanso em andamento',
+    android: {
+      channelId: RUNNING_CHANNEL_ID,
+      ongoing: true,
+      autoCancel: false,
+      showChronometer: true,
+      chronometerDirection: 'down',
+      timestamp: Date.now() + seconds * 1000,
+      category: AndroidCategory.PROGRESS,
+      pressAction: { id: 'default' },
+    },
+  });
+}
+
+async function cancelRunningNotification(): Promise<void> {
+  await notifee.cancelNotification(RUNNING_NOTIFICATION_ID).catch(() => {});
+}
+
 export async function scheduleTimerAlarm(seconds: number): Promise<void> {
   await notifee.requestPermission();
+  await ensureAlarmPermission();
   await ensureChannels();
   await notifee.cancelTriggerNotification(TIMER_NOTIFICATION_ID).catch(() => {});
 
@@ -90,18 +149,26 @@ export async function scheduleTimerAlarm(seconds: number): Promise<void> {
       alarmManager: { type: AlarmType.SET_ALARM_CLOCK },
     }
   );
+
+  await showRunningNotification(seconds);
 }
 
 export async function cancelTimerAlarm(): Promise<void> {
   await notifee.cancelTriggerNotification(TIMER_NOTIFICATION_ID).catch(() => {});
+  await cancelRunningNotification();
   stopTimerAlarmService();
 }
 
 let stopResolver: (() => void) | null = null;
+let autoStopTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /** Stops the continuous vibration loop the foreground service started, and lets the service end. */
 export function stopTimerAlarmService(): void {
   Vibration.cancel();
+  if (autoStopTimeout) {
+    clearTimeout(autoStopTimeout);
+    autoStopTimeout = null;
+  }
   stopResolver?.();
   stopResolver = null;
 }
@@ -112,7 +179,11 @@ notifee.registerForegroundService(
   () =>
     new Promise<void>((resolve) => {
       stopResolver = resolve;
+      // The countdown is over — the "Descanso finalizado!" trigger notification takes over now,
+      // the running/chronometer one no longer applies.
+      void cancelRunningNotification();
       Vibration.vibrate(FOREGROUND_VIBRATION_UNIT, true);
+      autoStopTimeout = setTimeout(() => stopTimerAlarmService(), MAX_VIBRATION_MS);
     })
 );
 
