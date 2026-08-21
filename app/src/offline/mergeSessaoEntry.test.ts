@@ -13,6 +13,7 @@ const exercicio: Exercicio = {
   pesoKg: 30,
   imagens: [],
   videoUrls: [],
+  substitutoIds: [],
 };
 
 const emptySessao: Sessao = {

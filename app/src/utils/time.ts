@@ -19,3 +19,10 @@ export function formatTimeInput(raw: string): string {
 
   return `${hours}:${minutes}`;
 }
+
+/** Formats a countdown duration in seconds as "MM:SS". */
+export function formatSeconds(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}

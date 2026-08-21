@@ -27,6 +27,7 @@ export const createExercicioSchema = z.object({
   pesoKg: z.number().min(0).max(1000),
   cargaMaximaKg: z.number().min(0).max(500).optional(),
   videoUrls,
+  substitutoIds: z.array(uuid).max(20).optional(),
 });
 
 export const updateExercicioSchema = z.object({
@@ -38,6 +39,7 @@ export const updateExercicioSchema = z.object({
   pesoKg: z.number().min(0).max(1000).optional(),
   cargaMaximaKg: z.number().min(0).max(500).optional(),
   videoUrls,
+  substitutoIds: z.array(uuid).max(20).optional(),
 });
 
 export const createTreinoSchema = z.object({

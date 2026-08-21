@@ -4,7 +4,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { deleteTreino, getTreino, listCategorias, listExercicios, updateTreino } from '@/api/workoutApi';
+import { getApiErrorMessage } from '@/api/apiClient';
+import { cloneTreino, deleteTreino, getTreino, listCategorias, listExercicios, updateTreino } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
@@ -32,6 +33,7 @@ export default function TreinoEditorScreen() {
   const [loading, setLoading] = useState(true);
   const [nome, setNome] = useState('');
   const [savingNome, setSavingNome] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   const load = useCallback(async () => {
     const [treinoData, exerciciosData, categoriasData] = await Promise.all([
@@ -114,6 +116,19 @@ export default function TreinoEditorScreen() {
     ]);
   }
 
+  async function handleCloneTreino() {
+    setCloning(true);
+    try {
+      const clone = await cloneTreino(treinoId);
+      showToast('Treino clonado');
+      router.push(`/(tabs)/exercicios/treinos/${clone._id}`);
+    } catch (err) {
+      Alert.alert('Não foi possível clonar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    } finally {
+      setCloning(false);
+    }
+  }
+
   if (loading || !treino) {
     return (
       <ThemedView style={styles.container}>
@@ -187,10 +202,20 @@ export default function TreinoEditorScreen() {
             </View>
           )}
 
-          <Pressable onPress={handleDeleteTreino} style={styles.dangerLink}>
-            <Ionicons name="trash-outline" size={16} color="#e53935" />
-            <ThemedText style={styles.dangerText}>Excluir treino</ThemedText>
-          </Pressable>
+          <View style={styles.secondaryRow}>
+            <Pressable onPress={handleCloneTreino} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
+              <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+              <ThemedText type="small" themeColor="textSecondary">
+                Clonar
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={handleDeleteTreino} hitSlop={8} style={styles.secondaryButton}>
+              <Ionicons name="trash-outline" size={16} color="#e53935" />
+              <ThemedText type="small" style={styles.dangerText}>
+                Excluir treino
+              </ThemedText>
+            </Pressable>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -216,12 +241,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dangerLink: {
+  secondaryRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-    alignSelf: 'center',
+    justifyContent: 'center',
+    gap: Spacing.five,
     marginTop: Spacing.two,
   },
+  secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   dangerText: { color: '#e53935' },
 });

@@ -1,13 +1,10 @@
-import { usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
-
-const TAB_SCREEN_PREFIXES = ['/calendario', '/exercicios', '/extras'];
 
 export type ToastType = 'success' | 'error';
 
@@ -34,7 +31,6 @@ export function showToast(message: string, type: ToastType = 'success'): void {
 
 export function ToastHost() {
   const [toast, setToast] = useState<ToastState | null>(currentToast);
-  const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -46,15 +42,13 @@ export function ToastHost() {
 
   if (!toast) return null;
 
-  const isTabScreen = TAB_SCREEN_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  const bottom = isTabScreen ? 64 + insets.bottom + Spacing.two : Spacing.six;
   const backgroundColor = toast.type === 'error' ? '#e53935' : Brand.primary;
 
   return (
     <Animated.View
       entering={FadeInDown.duration(200)}
-      exiting={FadeOutDown.duration(200)}
-      style={[styles.container, { bottom }]}
+      exiting={FadeOutUp.duration(200)}
+      style={[styles.container, { top: insets.top + Spacing.two }]}
       pointerEvents="none">
       <View style={[styles.bubble, { backgroundColor }]}>
         <ThemedText style={styles.text}>{toast.message}</ThemedText>

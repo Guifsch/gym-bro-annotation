@@ -17,6 +17,7 @@ export interface Exercicio {
   reps: number;
   pesoKg: number;
   cargaMaximaKg?: number;
+  substitutoIds: string[];
   capa?: ExercicioImagem;
   videoUrls: string[];
   imagens: ExercicioImagem[];
@@ -37,6 +38,9 @@ export interface Treino {
   nome: string;
   exercicioIds: string[];
 }
+
+export type LogField = 'sets' | 'reps' | 'pesoKg';
+export type LogFields = Partial<Record<LogField, number>>;
 
 export interface SessaoEntry {
   _id: string;

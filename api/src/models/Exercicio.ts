@@ -23,6 +23,7 @@ const exercicioSchema = new Schema({
   reps: { type: Number, required: true, min: 0, max: 500 },
   pesoKg: { type: Number, required: true, min: 0, max: 1000 },
   cargaMaximaKg: { type: Number, min: 0, max: 500 },
+  substitutoIds: { type: [String], ref: 'Exercicio', default: [] },
   capa: {
     type: { url: { type: String, required: true }, key: { type: String, required: true } },
     required: false,

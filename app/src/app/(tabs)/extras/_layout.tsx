@@ -5,6 +5,8 @@ export default function ExtrasLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="alimentacao" />
+      <Stack.Screen name="timer" />
+      <Stack.Screen name="relatorios" />
     </Stack>
   );
 }

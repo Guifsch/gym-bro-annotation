@@ -48,6 +48,7 @@ export interface CreateExercicioParams {
   pesoKg: number;
   cargaMaximaKg?: number;
   videoUrls?: string[];
+  substitutoIds?: string[];
 }
 
 export async function createExercicio(params: CreateExercicioParams): Promise<Exercicio> {
@@ -64,6 +65,7 @@ export interface UpdateExercicioParams {
   pesoKg?: number;
   cargaMaximaKg?: number;
   videoUrls?: string[];
+  substitutoIds?: string[];
 }
 
 export async function updateExercicio(id: string, params: UpdateExercicioParams): Promise<Exercicio> {
@@ -123,6 +125,11 @@ export async function deleteExercicioCapa(id: string): Promise<Exercicio> {
   return data.exercicio;
 }
 
+export async function cloneExercicio(id: string): Promise<Exercicio> {
+  const { data } = await apiClient.post(`/api/exercicios/${id}/clone`);
+  return data.exercicio;
+}
+
 export async function listTreinos(): Promise<Treino[]> {
   const { data } = await apiClient.get('/api/treinos');
   return data.treinos;
@@ -147,9 +154,40 @@ export async function deleteTreino(id: string): Promise<void> {
   await apiClient.delete(`/api/treinos/${id}`);
 }
 
+export async function cloneTreino(id: string): Promise<Treino> {
+  const { data } = await apiClient.post(`/api/treinos/${id}/clone`);
+  return data.treino;
+}
+
 export async function listSessaoDatesForMonth(year: string, month: string): Promise<string[]> {
   const { data } = await apiClient.get('/api/sessoes/month', { params: { year, month } });
   return data.dates;
+}
+
+export async function listAttendanceDatesForMonth(year: string, month: string): Promise<string[]> {
+  const { data } = await apiClient.get('/api/attendance/month', { params: { year, month } });
+  return data.dates;
+}
+
+export async function getAttendance(date: string): Promise<boolean> {
+  const { data } = await apiClient.get(`/api/attendance/${date}`);
+  return data.checked;
+}
+
+export async function setAttendance(date: string, checked: boolean): Promise<boolean> {
+  const { data } = await apiClient.put(`/api/attendance/${date}`, { checked });
+  return data.checked;
+}
+
+export interface AttendanceSummary {
+  year: string;
+  total: number;
+  perMonth: number[];
+}
+
+export async function getAttendanceSummary(year: string): Promise<AttendanceSummary> {
+  const { data } = await apiClient.get(`/api/attendance/summary/${year}`);
+  return data;
 }
 
 export async function listSessoesForDay(date: string): Promise<DiaTreino[]> {

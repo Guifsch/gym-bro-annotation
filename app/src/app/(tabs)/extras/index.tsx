@@ -47,6 +47,18 @@ export default function ExtrasLandingScreen() {
           subtitle="Organize suas refeições"
           onPress={() => router.push('/(tabs)/extras/alimentacao')}
         />
+        <LandingOption
+          icon="timer-outline"
+          title="Timer"
+          subtitle="Timer de descanso e barra fixa"
+          onPress={() => router.push('/(tabs)/extras/timer')}
+        />
+        <LandingOption
+          icon="stats-chart-outline"
+          title="Relatórios"
+          subtitle="Estatísticas de frequência na academia"
+          onPress={() => router.push('/(tabs)/extras/relatorios')}
+        />
       </SafeAreaView>
     </ThemedView>
   );

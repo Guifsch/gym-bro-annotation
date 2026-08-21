@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
 import {
+  cloneExercicio,
   createExercicio,
   deleteExercicio,
   deleteExercicioCapa,
@@ -23,14 +24,14 @@ import { CategoryIcon } from '@/components/category-icon';
 import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
-import type { LogFields } from '@/components/exercicio-entry-editor';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
+import { InlineLogEditor } from '@/components/inline-log-editor';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { PercentualTable } from '@/components/percentual-table';
-import { QuickEntryInline } from '@/components/quick-entry-inline';
+import { SubstitutoPicker } from '@/components/substituto-picker';
 import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -39,7 +40,7 @@ import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategoryScroll } from '@/hooks/useCategoryScroll';
-import type { Categoria, Exercicio } from '@/types/workout';
+import type { Categoria, Exercicio, LogFields } from '@/types/workout';
 
 export default function ExerciciosListaScreen() {
   const theme = useTheme();
@@ -49,6 +50,7 @@ export default function ExerciciosListaScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cloning, setCloning] = useState(false);
   const [historicoVisible, setHistoricoVisible] = useState(false);
 
   const [nome, setNome] = useState('');
@@ -58,6 +60,7 @@ export default function ExerciciosListaScreen() {
   const [pesoText, setPesoText] = useState('');
   const [cargaMaximaText, setCargaMaximaText] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
+  const [substitutoIds, setSubstitutoIds] = useState<string[]>([]);
 
   const [stagedCapa, setStagedCapa] = useState<{ uri: string; contentType: string } | null>(null);
   const [stagedImagens, setStagedImagens] = useState<{ uri: string; contentType: string }[]>([]);
@@ -97,6 +100,30 @@ export default function ExerciciosListaScreen() {
   );
 
   const editingExercicio = useMemo(() => exercicios.find((e) => e._id === editingId) ?? null, [exercicios, editingId]);
+
+  // Substitutes are stored one-directional (each exercise's own `substitutoIds` array), but shown
+  // both ways in the listing: an exercise shows its own list PLUS any other exercise that names
+  // *it* as a substitute — so the user only has to set the relationship from one side and it
+  // still shows up when browsing either exercise.
+  const substitutosDisplayById = useMemo(() => {
+    const exercicioNomeById = Object.fromEntries(exercicios.map((e) => [e._id, e.nome]));
+    const map: Record<string, { id: string; nome: string }[]> = {};
+
+    function add(exercicioId: string, substitutoId: string) {
+      const nome = exercicioNomeById[substitutoId];
+      if (!nome) return;
+      const list = map[exercicioId] ?? (map[exercicioId] = []);
+      if (!list.some((s) => s.id === substitutoId)) list.push({ id: substitutoId, nome });
+    }
+
+    for (const exercicio of exercicios) {
+      for (const substitutoId of exercicio.substitutoIds) {
+        add(exercicio._id, substitutoId);
+        add(substitutoId, exercicio._id);
+      }
+    }
+    return map;
+  }, [exercicios]);
 
   const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
 
@@ -214,6 +241,7 @@ export default function ExerciciosListaScreen() {
     setPesoText('');
     setCargaMaximaText('');
     setCategoriaId(null);
+    setSubstitutoIds([]);
     setStagedCapa(null);
     setStagedImagens([]);
     setStagedVideoUrls([]);
@@ -228,6 +256,14 @@ export default function ExerciciosListaScreen() {
     setPesoText(String(exercicio.pesoKg));
     setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
     setCategoriaId(exercicio.categoriaId);
+    setSubstitutoIds(exercicio.substitutoIds);
+  }
+
+  function handleGoToSubstituto(id: string) {
+    const target = exercicios.find((e) => e._id === id);
+    if (!target) return;
+    startEditing(target);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }
 
   async function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
@@ -265,6 +301,7 @@ export default function ExerciciosListaScreen() {
           reps: parsedReps,
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
+          substitutoIds,
         });
         setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
       } else {
@@ -278,6 +315,7 @@ export default function ExerciciosListaScreen() {
           pesoKg: parsedPeso,
           cargaMaximaKg: parsedCargaMaxima,
           videoUrls: stagedVideoUrls.length ? stagedVideoUrls : undefined,
+          substitutoIds,
         });
         setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
         setCreating(false);
@@ -329,12 +367,27 @@ export default function ExerciciosListaScreen() {
     ]);
   }
 
+  async function handleClone() {
+    if (!editingId) return;
+    setCloning(true);
+    try {
+      const clone = await cloneExercicio(editingId);
+      setExercicios((prev) => [...prev, clone].sort((a, b) => a.nome.localeCompare(b.nome)));
+      startEditing(clone);
+      showToast('Exercício clonado');
+    } catch (err) {
+      Alert.alert('Não foi possível clonar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    } finally {
+      setCloning(false);
+    }
+  }
+
   const canSave = Boolean(nome.trim() && setsText && repsText && pesoText);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <BackHeader title="Exercícios" />
+        <BackHeader title="Exercícios" onBack={creating || editingId ? resetForm : undefined} />
 
         <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {!creating && !editingId ? (
@@ -452,6 +505,19 @@ export default function ExerciciosListaScreen() {
               )}
             </View>
 
+            <ThemedText type="small" themeColor="textSecondary">
+              Exercícios substitutos (opcional)
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Aparecem na listagem como alternativa caso o equipamento esteja ocupado.
+            </ThemedText>
+            <SubstitutoPicker
+              exercicios={exercicios.filter((e) => e._id !== editingId)}
+              categoriaNomeById={categoriaNomeById}
+              selectedIds={substitutoIds}
+              onChange={setSubstitutoIds}
+            />
+
             <View style={styles.actionsColumn}>
               <GradientButton
                 title={editingId ? 'Salvar alterações' : 'Criar exercício'}
@@ -465,6 +531,14 @@ export default function ExerciciosListaScreen() {
                     <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
                     <ThemedText type="small" themeColor="textSecondary">
                       Histórico
+                    </ThemedText>
+                  </Pressable>
+                )}
+                {editingId && (
+                  <Pressable onPress={handleClone} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
+                    <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Clonar
                     </ThemedText>
                   </Pressable>
                 )}
@@ -511,13 +585,34 @@ export default function ExerciciosListaScreen() {
                                     <ThemedText type="small" themeColor="textSecondary">
                                       {item.sets}x{item.reps} · {item.pesoKg}kg
                                     </ThemedText>
+                                    {substitutosDisplayById[item._id] && (
+                                      <View style={styles.substitutoList}>
+                                        {substitutosDisplayById[item._id].map((s) => (
+                                          <Pressable
+                                            key={s.id}
+                                            onPress={() => handleGoToSubstituto(s.id)}
+                                            style={styles.substitutoRow}>
+                                            <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
+                                            <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
+                                              {s.nome}
+                                            </ThemedText>
+                                          </Pressable>
+                                        ))}
+                                      </View>
+                                    )}
                                   </View>
                                   <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
                                     <Ionicons name="trash-outline" size={18} color="#e53935" />
                                   </Pressable>
                                 </Card>
                               </Pressable>
-                              <QuickEntryInline onSaveFields={(fields) => handleQuickUpdate(item, fields)} />
+                              <InlineLogEditor
+                                key={`${item._id}-${item.sets}-${item.reps}-${item.pesoKg}`}
+                                sets={item.sets}
+                                reps={item.reps}
+                                pesoKg={item.pesoKg}
+                                onSaveFields={(fields) => handleQuickUpdate(item, fields)}
+                              />
                             </View>
                           </SwipeableRow>
                         ))}
@@ -559,6 +654,9 @@ const styles = StyleSheet.create({
   list: { gap: Spacing.two },
   itemWrap: { gap: Spacing.one },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  substitutoList: { gap: 2, marginTop: 2 },
+  substitutoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  substitutoText: { color: Brand.primary, textDecorationLine: 'underline' },
   deleteButton: { padding: Spacing.one },
   groupsWrap: { gap: Spacing.four },
   grupo: { gap: Spacing.two },

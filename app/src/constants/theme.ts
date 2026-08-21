@@ -35,6 +35,16 @@ export const Brand = {
   accent: '#FF7A45',
 } as const;
 
+/** Poppins, loaded via `useFonts` in the root layout — see `ThemedText` for how these map to
+ * the `type` variants. `Fonts.mono` below is untouched (code stays in the system monospace). */
+export const FontFamily = {
+  regular: 'Poppins_400Regular',
+  medium: 'Poppins_500Medium',
+  semibold: 'Poppins_600SemiBold',
+  bold: 'Poppins_700Bold',
+  extrabold: 'Poppins_800ExtraBold',
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

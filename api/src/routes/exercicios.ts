@@ -16,6 +16,29 @@ const MAX_EXERCICIOS = 100;
 const router = Router();
 router.use(requireAuth);
 
+/** `substitutoIds` is user input pointing at other of the user's own exercises — validated here
+ * (ownership + not-self, deduped) rather than in the Zod schema, since that requires a DB lookup.
+ * `undefined` (field omitted) passes through unchanged — a no-op for PATCH. */
+async function resolveSubstitutoIds(
+  userId: string,
+  exercicioId: string,
+  substitutoIds: string[] | undefined
+): Promise<{ ok: true; value: string[] | undefined } | { ok: false; error: string }> {
+  if (substitutoIds === undefined) return { ok: true, value: undefined };
+
+  const uniqueIds = [...new Set(substitutoIds)];
+  if (uniqueIds.includes(exercicioId)) {
+    return { ok: false, error: 'Um exercício não pode ser o próprio substituto' };
+  }
+  if (uniqueIds.length === 0) return { ok: true, value: [] };
+
+  const count = await Exercicio.countDocuments({ _id: { $in: uniqueIds }, userId });
+  if (count !== uniqueIds.length) {
+    return { ok: false, error: 'Exercício substituto não encontrado' };
+  }
+  return { ok: true, value: uniqueIds };
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -27,9 +50,8 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrls } = createExercicioSchema.parse(
-      req.body
-    );
+    const { id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrls, substitutoIds } =
+      createExercicioSchema.parse(req.body);
 
     const existing = await Exercicio.findOne({ _id: id, userId: req.user!.id });
     if (!existing) {
@@ -40,14 +62,69 @@ router.post(
       }
     }
 
+    const resolved = await resolveSubstitutoIds(req.user!.id, id, substitutoIds);
+    if (!resolved.ok) {
+      res.status(400).json({ error: resolved.error });
+      return;
+    }
+
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
       {
-        $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao, categoriaId, sets, reps, pesoKg, cargaMaximaKg, videoUrls },
+        $setOnInsert: {
+          _id: id,
+          userId: req.user!.id,
+          nome,
+          descricao,
+          categoriaId,
+          sets,
+          reps,
+          pesoKg,
+          cargaMaximaKg,
+          videoUrls,
+          substitutoIds: resolved.value ?? [],
+        },
       },
       { upsert: true, new: true }
     );
     res.status(201).json({ exercicio });
+  })
+);
+
+router.post(
+  '/:id/clone',
+  asyncHandler(async (req, res) => {
+    const original = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id }).select('-historico');
+    if (!original) {
+      res.status(404).json({ error: 'Exercício não encontrado' });
+      return;
+    }
+
+    const count = await Exercicio.countDocuments({ userId: req.user!.id });
+    if (count >= MAX_EXERCICIOS) {
+      res.status(409).json({ error: `Limite de ${MAX_EXERCICIOS} exercícios atingido` });
+      return;
+    }
+
+    // capa/imagens are intentionally not duplicated — copying them would mean re-uploading the
+    // actual files to R2 under a new key, not just copying a reference.
+    const suffix = ' (cópia)';
+    const baseName = original.nome.length + suffix.length > 50 ? original.nome.slice(0, 50 - suffix.length) : original.nome;
+
+    const clone = await Exercicio.create({
+      _id: randomUUID(),
+      userId: req.user!.id,
+      nome: `${baseName}${suffix}`,
+      descricao: original.descricao,
+      categoriaId: original.categoriaId,
+      sets: original.sets,
+      reps: original.reps,
+      pesoKg: original.pesoKg,
+      cargaMaximaKg: original.cargaMaximaKg,
+      videoUrls: original.videoUrls,
+    });
+
+    res.status(201).json({ exercicio: clone });
   })
 );
 
@@ -62,6 +139,12 @@ router.patch(
       return;
     }
 
+    const resolved = await resolveSubstitutoIds(req.user!.id, req.params.id!, body.substitutoIds);
+    if (!resolved.ok) {
+      res.status(400).json({ error: resolved.error });
+      return;
+    }
+
     const snapshot = {
       _id: randomUUID(),
       nome: existing.nome,
@@ -72,9 +155,13 @@ router.patch(
       alteradoEm: new Date(),
     };
 
+    const { substitutoIds: _substitutoIds, ...restBody } = body;
+    const setOps: Record<string, unknown> = { ...restBody };
+    if (resolved.value !== undefined) setOps.substitutoIds = resolved.value;
+
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
-      { $set: body, $push: { historico: { $each: [snapshot], $slice: -50 } } },
+      { $set: setOps, $push: { historico: { $each: [snapshot], $slice: -50 } } },
       { new: true }
     ).select('-historico');
     if (!exercicio) {
@@ -139,6 +226,11 @@ router.delete(
     await Treino.updateMany(
       { userId: req.user!.id, exercicioIds: req.params.id },
       { $pull: { exercicioIds: req.params.id } }
+    );
+
+    await Exercicio.updateMany(
+      { userId: req.user!.id, substitutoIds: req.params.id },
+      { $pull: { substitutoIds: req.params.id } }
     );
 
     res.status(204).end();

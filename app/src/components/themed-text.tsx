@@ -1,6 +1,6 @@
 import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 
-import { Brand, Fonts, ThemeColor } from '@/constants/theme';
+import { Brand, FontFamily, Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextProps = TextProps & {
@@ -30,42 +30,45 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   );
 }
 
+// Each Poppins weight is its own font file/family (not a variable font RN can re-weight on the
+// fly), so `fontFamily` picks the weight here directly instead of pairing a base family with
+// `fontWeight` — a `fontWeight` override layered on top from a caller's own `style` prop won't
+// reliably re-weight these, especially on Android.
 const styles = StyleSheet.create({
   small: {
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: 500,
+    fontFamily: FontFamily.medium,
   },
   smallBold: {
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: 700,
+    fontFamily: FontFamily.bold,
   },
   default: {
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: 500,
+    fontFamily: FontFamily.medium,
   },
   title: {
-    fontFamily: Fonts.rounded,
+    fontFamily: FontFamily.extrabold,
     fontSize: 44,
-    fontWeight: 800,
     lineHeight: 48,
   },
   subtitle: {
-    fontFamily: Fonts.rounded,
+    fontFamily: FontFamily.bold,
     fontSize: 28,
     lineHeight: 36,
-    fontWeight: 700,
   },
   link: {
     lineHeight: 30,
     fontSize: 14,
+    fontFamily: FontFamily.regular,
   },
   linkPrimary: {
     lineHeight: 30,
     fontSize: 14,
-    fontWeight: 600,
+    fontFamily: FontFamily.semibold,
     color: Brand.primary,
   },
   code: {

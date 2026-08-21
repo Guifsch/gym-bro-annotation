@@ -17,6 +17,10 @@ interface MonthCalendarProps {
   /** 'dot' (default) is a subtle indicator (e.g. "has a session logged"); 'fill' is a much more
    * visible solid circle, meant for contexts where marked = actively selected (e.g. a date picker). */
   markedStyle?: 'dot' | 'fill';
+  /** Days the "fui na academia" checkbox was marked for — rendered as a ring around the day circle
+   * instead of competing for the same dot/fill as `markedDates`, so both can show at once (a day
+   * can have a session logged AND be marked as attended, or just one of the two). */
+  attendanceDates?: Set<string>;
 }
 
 const WEEKDAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -52,6 +56,7 @@ export function MonthCalendar({
   onPrevMonth,
   onNextMonth,
   markedStyle = 'dot',
+  attendanceDates,
 }: MonthCalendarProps) {
   const theme = useTheme();
   const todayStr = getTodayDateString();
@@ -98,23 +103,25 @@ export function MonthCalendar({
 
             const isToday = cell.date === todayStr;
             const isMarked = markedDates.has(cell.date);
+            const hasAttendance = attendanceDates?.has(cell.date) ?? false;
+            const ringStyle = hasAttendance ? styles.attendanceRing : undefined;
 
             return (
               <Pressable key={cellIndex} onPress={() => onSelectDate(cell.date)} style={styles.cell}>
                 {isToday ? (
-                  <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={styles.dayCircle}>
+                  <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={[styles.dayCircle, ringStyle]}>
                     <ThemedText type="smallBold" style={styles.todayText}>
                       {cell.day}
                     </ThemedText>
                   </LinearGradient>
                 ) : isMarked && markedStyle === 'fill' ? (
-                  <View style={[styles.dayCircle, { backgroundColor: Brand.primary }]}>
+                  <View style={[styles.dayCircle, { backgroundColor: Brand.primary }, ringStyle]}>
                     <ThemedText type="smallBold" style={styles.todayText}>
                       {cell.day}
                     </ThemedText>
                   </View>
                 ) : (
-                  <View style={styles.dayCircle}>
+                  <View style={[styles.dayCircle, ringStyle]}>
                     <ThemedText type="small">{cell.day}</ThemedText>
                     {isMarked && <View style={styles.dot} />}
                   </View>
@@ -143,4 +150,5 @@ const styles = StyleSheet.create({
   dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   todayText: { color: '#fff' },
   dot: { position: 'absolute', bottom: 1, width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.primary },
+  attendanceRing: { borderWidth: 2, borderColor: Brand.accent },
 });

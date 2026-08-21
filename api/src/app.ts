@@ -3,6 +3,7 @@ import express from 'express';
 
 import { errorHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimit';
+import attendanceRoutes from './routes/attendance';
 import authRoutes from './routes/auth';
 import categoriasRoutes from './routes/categorias';
 import exerciciosRoutes from './routes/exercicios';
@@ -36,6 +37,7 @@ export function createApp() {
   app.use('/api/refeicoes', refeicoesRoutes);
   app.use('/api/sessoes', sessoesRoutes);
   app.use('/api/timer-presets', timerPresetsRoutes);
+  app.use('/api/attendance', attendanceRoutes);
 
   app.use(errorHandler);
 

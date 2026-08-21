@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -7,17 +8,18 @@ import { type UpsertEntryParams, getSessao, getTreino, listCategorias, listExerc
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
+import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
-import type { LogFields } from '@/components/exercicio-entry-editor';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
+import { InlineLogEditor } from '@/components/inline-log-editor';
 import { LoadingView } from '@/components/loading-view';
-import { QuickEntryInline } from '@/components/quick-entry-inline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
+import { useCategoryScroll } from '@/hooks/useCategoryScroll';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
 import { enqueueUpsertSessaoEntry } from '@/offline/queue';
-import type { Categoria, Exercicio, Sessao, Treino } from '@/types/workout';
+import type { Categoria, Exercicio, LogFields, Sessao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
 
 export default function SessaoDetalheScreen() {
@@ -55,6 +57,34 @@ export default function SessaoDetalheScreen() {
 
   const exercicioById = useMemo(() => Object.fromEntries(exercicios.map((e) => [e._id, e])), [exercicios]);
   const categoriaNomeById = useMemo(() => Object.fromEntries(categorias.map((c) => [c._id, c.nome])), [categorias]);
+
+  // Same one-directional-storage-shown-both-ways logic as exercicios/lista.tsx — kept in sync
+  // manually since it's a small memo, not worth extracting for two call sites.
+  const substitutosDisplayById = useMemo(() => {
+    const exercicioNomeById = Object.fromEntries(exercicios.map((e) => [e._id, e.nome]));
+    const map: Record<string, { id: string; nome: string }[]> = {};
+
+    function add(exercicioId: string, substitutoId: string) {
+      const nome = exercicioNomeById[substitutoId];
+      if (!nome) return;
+      const list = map[exercicioId] ?? (map[exercicioId] = []);
+      if (!list.some((s) => s.id === substitutoId)) list.push({ id: substitutoId, nome });
+    }
+
+    for (const exercicio of exercicios) {
+      for (const substitutoId of exercicio.substitutoIds) {
+        add(exercicio._id, substitutoId);
+        add(substitutoId, exercicio._id);
+      }
+    }
+    return map;
+  }, [exercicios]);
+
+  function handleGoToSubstituto(id: string) {
+    router.push(`/(tabs)/calendario/${date}/${sessaoId}/${id}`);
+  }
+
+  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
 
   const gruposPorCategoria = useMemo(() => {
     if (!treino) return [];
@@ -117,9 +147,13 @@ export default function SessaoDetalheScreen() {
             Este treino não tem exercícios vinculados ainda (edite em Exercícios &gt; Treinos).
           </ThemedText>
         ) : (
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <CategoryJumpBar
+              categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
+              onSelect={scrollToGroup}
+            />
             {gruposPorCategoria.map((grupo) => (
-              <View key={grupo.categoriaId} style={styles.grupo}>
+              <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
                 <View style={styles.grupoHeader}>
                   <CategoryIcon nome={grupo.nome} size={16} />
                   <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
@@ -143,10 +177,31 @@ export default function SessaoDetalheScreen() {
                               <ThemedText type="small" themeColor="textSecondary">
                                 {sets}x{reps} · {pesoKg}kg
                               </ThemedText>
+                              {substitutosDisplayById[exercicio._id] && (
+                                <View style={styles.substitutoList}>
+                                  {substitutosDisplayById[exercicio._id].map((s) => (
+                                    <Pressable
+                                      key={s.id}
+                                      onPress={() => handleGoToSubstituto(s.id)}
+                                      style={styles.substitutoRow}>
+                                      <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
+                                      <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
+                                        {s.nome}
+                                      </ThemedText>
+                                    </Pressable>
+                                  ))}
+                                </View>
+                              )}
                             </View>
                           </Card>
                         </Pressable>
-                        <QuickEntryInline onSaveFields={(fields) => handleSaveFields(exercicio, fields)} />
+                        <InlineLogEditor
+                          key={`${exercicio._id}-${sets}-${reps}-${pesoKg}`}
+                          sets={sets}
+                          reps={reps}
+                          pesoKg={pesoKg}
+                          onSaveFields={(fields) => handleSaveFields(exercicio, fields)}
+                        />
                       </View>
                     );
                   })}
@@ -171,4 +226,7 @@ const styles = StyleSheet.create({
   exercicioWrap: { gap: Spacing.one },
   exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   exercicioText: { flex: 1, gap: 2 },
+  substitutoList: { gap: 2, marginTop: 2 },
+  substitutoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  substitutoText: { color: Brand.primary, textDecorationLine: 'underline' },
 });

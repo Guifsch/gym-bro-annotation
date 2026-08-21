@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import { Router } from 'express';
 
 import { requireAuth } from '../middleware/requireAuth';
@@ -51,6 +53,35 @@ router.get(
       return;
     }
     res.status(200).json({ treino });
+  })
+);
+
+router.post(
+  '/:id/clone',
+  asyncHandler(async (req, res) => {
+    const original = await Treino.findOne({ _id: req.params.id, userId: req.user!.id });
+    if (!original) {
+      res.status(404).json({ error: 'Treino não encontrado' });
+      return;
+    }
+
+    const count = await Treino.countDocuments({ userId: req.user!.id });
+    if (count >= MAX_TREINOS) {
+      res.status(409).json({ error: `Limite de ${MAX_TREINOS} treinos atingido` });
+      return;
+    }
+
+    const suffix = ' (cópia)';
+    const baseName = original.nome.length + suffix.length > 120 ? original.nome.slice(0, 120 - suffix.length) : original.nome;
+
+    const clone = await Treino.create({
+      _id: randomUUID(),
+      userId: req.user!.id,
+      nome: `${baseName}${suffix}`,
+      exercicioIds: original.exercicioIds,
+    });
+
+    res.status(201).json({ treino: clone });
   })
 );
 
