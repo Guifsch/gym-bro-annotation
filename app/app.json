@@ -47,7 +47,8 @@
         }
       ],
       "./plugins/withNotifeeMavenRepo.js",
-      "./plugins/withNotifeeForegroundService.js"
+      "./plugins/withNotifeeForegroundService.js",
+      "./plugins/withNotificationIcon.js"
     ],
     "experiments": {
       "typedRoutes": true,

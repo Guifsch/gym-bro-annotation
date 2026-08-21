@@ -41,15 +41,34 @@ function channelId(vibrar: boolean, som: boolean): string {
 // a timer starts, so it must never itself buzz/ring (that's what the alarm channels above are for).
 const RUNNING_CHANNEL_ID = `timer-running-${CHANNEL_VERSION}`;
 
+const TIMER_CHANNEL_PREFIXES = ['timer-alarm-', 'timer-running-'];
+
+/** Deletes any leftover channel from a previous `CHANNEL_VERSION` — Android channels are
+ * permanent once created (they survive app updates/rebuilds, only a full uninstall clears them),
+ * so every version bump otherwise leaves the old ones behind forever, cluttering the notification
+ * settings screen with duplicate "Timer de descanso" entries. */
+async function pruneOldChannels(currentIds: Set<string>): Promise<void> {
+  const existing = await notifee.getChannels();
+  for (const channel of existing) {
+    const isOwnedByThisFeature = TIMER_CHANNEL_PREFIXES.some((prefix) => channel.id.startsWith(prefix));
+    if (isOwnedByThisFeature && !currentIds.has(channel.id)) {
+      await notifee.deleteChannel(channel.id);
+    }
+  }
+}
+
 let channelsReadyPromise: Promise<void> | null = null;
 async function ensureChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
   if (!channelsReadyPromise) {
     channelsReadyPromise = (async () => {
+      const currentIds = new Set<string>([RUNNING_CHANNEL_ID]);
       for (const vibrar of [true, false]) {
         for (const som of [true, false]) {
+          const id = channelId(vibrar, som);
+          currentIds.add(id);
           await notifee.createChannel({
-            id: channelId(vibrar, som),
+            id,
             name: 'Timer de descanso',
             importance: AndroidImportance.HIGH,
             vibration: vibrar,
@@ -64,6 +83,7 @@ async function ensureChannels(): Promise<void> {
         importance: AndroidImportance.LOW,
         vibration: false,
       });
+      await pruneOldChannels(currentIds);
     })().catch((err) => {
       channelsReadyPromise = null; // let the next call retry instead of replaying this failure forever
       throw err;
@@ -104,6 +124,7 @@ async function showRunningNotification(seconds: number): Promise<void> {
     title: 'Descanso em andamento',
     android: {
       channelId: RUNNING_CHANNEL_ID,
+      smallIcon: 'ic_notification',
       ongoing: true,
       autoCancel: false,
       showChronometer: true,
@@ -115,7 +136,11 @@ async function showRunningNotification(seconds: number): Promise<void> {
   });
 }
 
-async function cancelRunningNotification(): Promise<void> {
+/** Exported so the JS-side countdown (in the timer store) can also clear the "running" indicator
+ * as a safety net — e.g. if the trigger notification's own foreground-service callback never runs
+ * (permission not granted, OS killed the process, etc.), this stops the native chronometer from
+ * silently ticking into negative numbers forever once the app notices completion on its own. */
+export async function cancelRunningNotification(): Promise<void> {
   await notifee.cancelNotification(RUNNING_NOTIFICATION_ID).catch(() => {});
 }
 
@@ -131,6 +156,7 @@ export async function scheduleTimerAlarm(seconds: number): Promise<void> {
       title: 'Descanso finalizado!',
       android: {
         channelId: channelId(currentVibrar, currentSom),
+        smallIcon: 'ic_notification',
         asForegroundService: true,
         category: AndroidCategory.ALARM,
         importance: AndroidImportance.HIGH,

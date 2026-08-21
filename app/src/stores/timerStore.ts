@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 import { createTimerPreset, deleteTimerPreset, listTimerPresets } from '@/api/workoutApi';
 import {
+  cancelRunningNotification,
   cancelTimerAlarm,
   scheduleTimerAlarm,
   setTimerAlarmListener,
@@ -80,6 +81,11 @@ export const useTimerStore = create<TimerState>((set, get) => {
       stopInterval();
       endTime = null;
       set({ running: false, alarming: true });
+      // Safety net: if the OS-level alarm never actually fired (permission not granted, process
+      // killed, etc.), the foreground service's own cleanup never ran either — without this, the
+      // "still running" notification's native chronometer just keeps counting into negative
+      // numbers forever since nothing else tells it to stop.
+      void cancelRunningNotification();
     }
   }
 
