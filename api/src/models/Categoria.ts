@@ -4,6 +4,8 @@ const categoriaSchema = new Schema({
   _id: { type: String },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   nome: { type: String, required: true, trim: true, maxlength: 120 },
+  descricao: { type: String, trim: true, maxlength: 200 },
+  ordem: { type: Number, default: () => Date.now() },
   createdAt: { type: Date, default: Date.now },
 });
 

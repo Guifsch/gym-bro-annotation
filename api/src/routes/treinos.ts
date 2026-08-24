@@ -72,7 +72,7 @@ router.post(
     }
 
     const suffix = ' (cópia)';
-    const baseName = original.nome.length + suffix.length > 120 ? original.nome.slice(0, 120 - suffix.length) : original.nome;
+    const baseName = original.nome.length + suffix.length > 50 ? original.nome.slice(0, 50 - suffix.length) : original.nome;
 
     const clone = await Treino.create({
       _id: randomUUID(),

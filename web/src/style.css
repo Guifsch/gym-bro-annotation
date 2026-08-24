@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 1rem;
+}
+
+.v-card {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.v-card.v-card--variant-outlined {
+  border-width: 1px;
+}
+
+.v-card-title {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  padding: 16px 20px !important;
+}
+
+.v-list-item-title {
+  font-size: 0.95rem !important;
+}
+
+.v-list-item-subtitle {
+  font-size: 0.85rem !important;
+}
+
+.v-card-text {
+  padding: 20px !important;
+}
+
+.v-card-title + .v-card-text {
+  padding-top: 4px !important;
+}
+
+.page-container {
+  max-width: 1080px;
+}
+
+.auth-submit-btn {
+  background-color: #15b580 !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+}
+
+.auth-submit-btn:hover {
+  opacity: 0.92;
+}
+
+.auth-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.auth-link-row a {
+  color: #15b580;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-link-row a:hover {
+  text-decoration: underline;
+}
+
+.text-hint {
+  font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.text-eyebrow {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.field-w-md {
+  max-width: 240px;
+  width: 100%;
+}
+
+.field-w-lg {
+  max-width: 320px;
+  width: 100%;
+}
+
+.dialog-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* margin:0 makes the page background reach every edge, and as a side effect it also
+     suppresses Chrome's built-in header/footer (date/title/page number), since those are
+     only drawn inside the page margin — there's no CSS way to remove just one of them. */
+  @page {
+    margin: 0;
+  }
+}

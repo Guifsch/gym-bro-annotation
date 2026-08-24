@@ -20,6 +20,7 @@ export const env = {
   gmailUser: process.env.GMAIL_USER ?? '',
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
+  authCookieSecure: process.env.AUTH_COOKIE_SECURE === 'true',
   r2AccountId: process.env.R2_ACCOUNT_ID ?? '',
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',

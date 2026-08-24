@@ -15,6 +15,7 @@ import {
   verifyRefreshToken,
 } from '../utils/auth';
 import { asyncHandler } from '../utils/asyncHandler';
+import { clearAuthCookies, getRefreshTokenCookieName, setAuthCookies } from '../utils/cookies';
 import { sendPasswordResetCode, sendRegistrationCode } from '../utils/email';
 import {
   changePasswordSchema,
@@ -96,11 +97,11 @@ router.post(
     await record.save();
 
     const claims = publicUser(user);
-    res.status(201).json({
-      user: claims,
-      accessToken: signAccessToken(claims),
-      refreshToken: signRefreshToken(claims),
-    });
+    const accessToken = signAccessToken(claims);
+    const refreshToken = signRefreshToken(claims);
+    setAuthCookies(res, { accessToken, refreshToken });
+
+    res.status(201).json({ user: claims, accessToken, refreshToken });
   })
 );
 
@@ -117,18 +118,24 @@ router.post(
     }
 
     const claims = publicUser(user);
-    res.status(200).json({
-      user: claims,
-      accessToken: signAccessToken(claims),
-      refreshToken: signRefreshToken(claims),
-    });
+    const accessToken = signAccessToken(claims);
+    const refreshToken = signRefreshToken(claims);
+    setAuthCookies(res, { accessToken, refreshToken });
+
+    res.status(200).json({ user: claims, accessToken, refreshToken });
   })
 );
 
 router.post(
   '/refresh',
   asyncHandler(async (req, res) => {
-    const { refreshToken } = refreshSchema.parse(req.body);
+    const bodyRefreshToken = refreshSchema.partial().parse(req.body ?? {}).refreshToken;
+    const refreshToken = bodyRefreshToken ?? req.cookies?.[getRefreshTokenCookieName()];
+
+    if (!refreshToken) {
+      res.status(401).json({ error: 'Refresh token inválido ou expirado' });
+      return;
+    }
 
     let claims;
     try {
@@ -145,7 +152,10 @@ router.post(
     }
 
     const freshClaims = publicUser(user);
-    res.status(200).json({ user: freshClaims, accessToken: signAccessToken(freshClaims) });
+    const accessToken = signAccessToken(freshClaims);
+    setAuthCookies(res, { accessToken });
+
+    res.status(200).json({ user: freshClaims, accessToken });
   })
 );
 
@@ -270,6 +280,7 @@ router.post(
 );
 
 router.post('/logout', (_req, res) => {
+  clearAuthCookies(res);
   res.status(200).json({ message: 'ok' });
 });
 

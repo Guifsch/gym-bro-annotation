@@ -48,7 +48,8 @@
       ],
       "./plugins/withNotifeeMavenRepo.js",
       "./plugins/withNotifeeForegroundService.js",
-      "./plugins/withNotificationIcon.js"
+      "./plugins/withNotificationIcon.js",
+      "./plugins/withNotifeeProguardRules.js"
     ],
     "experiments": {
       "typedRoutes": true,

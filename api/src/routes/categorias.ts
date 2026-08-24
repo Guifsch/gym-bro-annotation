@@ -12,7 +12,7 @@ router.use(requireAuth);
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const categorias = await Categoria.find({ userId: req.user!.id }).sort({ nome: 1 });
+    const categorias = await Categoria.find({ userId: req.user!.id }).sort({ ordem: 1, nome: 1 });
     res.status(200).json({ categorias });
   })
 );
@@ -22,7 +22,7 @@ const MAX_CATEGORIAS = 50;
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { id, nome } = createCategoriaSchema.parse(req.body);
+    const { id, nome, descricao } = createCategoriaSchema.parse(req.body);
 
     const existing = await Categoria.findOne({ _id: id, userId: req.user!.id });
     if (!existing) {
@@ -35,7 +35,7 @@ router.post(
 
     const categoria = await Categoria.findOneAndUpdate(
       { _id: id, userId: req.user!.id },
-      { $setOnInsert: { _id: id, userId: req.user!.id, nome } },
+      { $setOnInsert: { _id: id, userId: req.user!.id, nome, descricao } },
       { upsert: true, new: true }
     );
     res.status(201).json({ categoria });
@@ -45,10 +45,10 @@ router.post(
 router.patch(
   '/:id',
   asyncHandler(async (req, res) => {
-    const { nome } = updateCategoriaSchema.parse(req.body);
+    const body = updateCategoriaSchema.parse(req.body);
     const categoria = await Categoria.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
-      { $set: { nome } },
+      { $set: body },
       { new: true }
     );
     if (!categoria) {

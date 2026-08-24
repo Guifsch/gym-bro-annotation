@@ -11,10 +11,13 @@ const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM
 export const createCategoriaSchema = z.object({
   id: uuid,
   nome,
+  descricao,
 });
 
 export const updateCategoriaSchema = z.object({
-  nome,
+  nome: nome.optional(),
+  descricao,
+  ordem: z.number().optional(),
 });
 
 export const createExercicioSchema = z.object({
@@ -28,6 +31,7 @@ export const createExercicioSchema = z.object({
   cargaMaximaKg: z.number().min(0).max(500).optional(),
   videoUrls,
   substitutoIds: z.array(uuid).max(20).optional(),
+  ordem: z.number().optional(),
 });
 
 export const updateExercicioSchema = z.object({
@@ -40,6 +44,11 @@ export const updateExercicioSchema = z.object({
   cargaMaximaKg: z.number().min(0).max(500).optional(),
   videoUrls,
   substitutoIds: z.array(uuid).max(20).optional(),
+  ordem: z.number().optional(),
+});
+
+export const reorderExercicioSchema = z.object({
+  ordem: z.number(),
 });
 
 export const createTreinoSchema = z.object({

@@ -7,9 +7,10 @@
 ## Stack
 
 - **App**: Expo SDK 57, React Native 0.86.2, React 19, TypeScript, Expo Router (file-based, grupo `(tabs)` e `(auth)`), Zustand, Hermes, React Compiler ligado (`experiments.reactCompiler` no `app.json`).
-- **API**: Express + MongoDB (Mongoose), deploy no Render (free tier — hiberna após inatividade, ver seção própria).
+- **API**: Express + MongoDB (Mongoose), migrando do Render pro Northflank (free tier sem hibernação — ver seção "Deploy e build").
 - **Imagens**: Cloudflare R2 (S3-compatible), upload via `expo-file-system`'s `File` class (`new File(uri).upload(...)`) — **não usar axios+`fetch().blob()`**, quebra o upload binário no RN.
-- **Repositório único**: `gym_bro_annotation/.git` na raiz — `api/` e `app/` são só subpastas, não repos separados. `git add`/`commit` rodado de dentro de qualquer subpasta opera no repo inteiro.
+- **Repositório único**: `gym_bro_annotation/.git` na raiz — `api/`, `app/` e `web/` são só subpastas, não repos separados. `git add`/`commit` rodado de dentro de qualquer subpasta opera no repo inteiro.
+- **`web/`**: companion desktop (Vite + Vue 3 + Vuetify 3, sem framework/SSR) que consome a mesma API — ver seção própria "Web (`web/`)" mais abaixo.
 
 ---
 
@@ -18,7 +19,7 @@
 3 tabs: **Calendário**, **Exercícios**, **Extras** (`(tabs)/_layout.tsx`). Nem toda funcionalidade é uma tab — landing pages dentro de uma tab (`TabHeader` + `LandingOption`) abrigam sub-seções que não precisam de aba própria:
 
 - **Exercícios** (`exercicios/index.tsx`): Categorias, Exercícios, **Treinos** (`exercicios/treinos/*` — não é mais tab própria, virou botão aqui; rotas `/(tabs)/exercicios/treinos[...]`).
-- **Extras** (`extras/index.tsx`): **Alimentação** (`extras/alimentacao/*`, rotas `/(tabs)/extras/alimentacao[...]`) — pensado como "gaveta" pra seções que não são nem calendário/treino nem cadastro de exercício; qualquer feature nova desse tipo (não claramente "exercício" nem "calendário") entra aqui em vez de virar tab nova.
+- **Extras** (`extras/index.tsx`): **Alimentação** (`extras/alimentacao/*`, rotas `/(tabs)/extras/alimentacao[...]`), **Timer** (`extras/timer.tsx` — UI completa do timer de descanso, ver seção própria) e **Relatórios** (`extras/relatorios.tsx` — estatísticas de presença, ver seção "Calendário") — pensado como "gaveta" pra seções que não são nem calendário/treino nem cadastro de exercício; qualquer feature nova desse tipo (não claramente "exercício" nem "calendário") entra aqui em vez de virar tab nova.
 
 **Histórico**: Treinos já foi tab própria; Alimentação já morou dentro de Exercícios. Movidos quando o app cresceu o suficiente pra 3 tabs ficarem sobrecarregadas — ao mover uma tela de lugar, sempre `grep` o projeto inteiro por `router.push`/`router.replace`/`Redirect` com o caminho antigo (inclusive os redirects pós-login em `app/index.tsx`, `(auth)/login.tsx`, `(auth)/register-code.tsx`, que apontavam pra tab default) e por menções textuais tipo "crie na tab X" em `EmptyState`/mensagens — fácil esquecer essas por não serem erro de tipo. **Sempre regenerar `.expo/types/router.d.ts`** depois de mover/renomear arquivo de rota (rodar `npx expo start` até o arquivo atualizar, depois parar) — `tsc --noEmit` falha com erros de rota "não existe" usando o manifest antigo, mesmo com os arquivos já movidos corretamente.
 
@@ -59,6 +60,11 @@ CRUD padrão nas 3 entidades, todas com **confirmação antes de excluir** (`Ale
   - **`components/video-link-gallery.tsx`** (`VideoLinkGallery`) — lista de `VideoPreview` (um por vídeo já salvo, com botão de excluir ao lado — **não** sobreposto, já que o preview varia muito de formato entre YouTube/Instagram/link genérico pra um badge posicionado em absoluto funcionar bem em todos) + campo de adicionar novo link (some com 5 vídeos).
 - **Histórico de edições** — cada `PATCH` bem-sucedido salva um snapshot (nome/descrição/sets/reps/peso + `alteradoEm`) em `Exercicio.historico[]` **antes** de aplicar a mudança (limite 50 via `$slice: -50`). Cada entrada tem `_id` próprio (`randomUUID()`) — permite excluir individualmente. **Não vem na listagem geral** (`GET /` usa `.select('-historico')`), só via `GET /:id/historico` (lazy, sob demanda). Exibido pelo componente compartilhado `ExercicioHistoricoModal` (usado tanto em `exercicios/lista.tsx` quanto na tela de exercício-dentro-de-sessão do calendário — não duplicar essa lógica).
 - **Data do histórico em BRT manual**: `formatDateTimeDisplay` calcula UTC-3 manualmente (não usa `Intl`/fuso do aparelho) — evita mostrar hora americana se o timezone do dispositivo estiver errado.
+- **Clonar** — botão "Clonar" (junto do "Histórico") em `exercicios/lista.tsx` (form de edição) e em `exercicios/treinos/[treinoId].tsx`. Endpoints `POST /api/exercicios/:id/clone` e `POST /api/treinos/:id/clone`; nome da cópia recebe sufixo `" (cópia)"` (truncando a base se precisar pra caber no limite de caracteres). **Capa/imagens do exercício não são clonadas** (exigiria re-upload de arquivo pro R2 sob uma key nova, fora de escopo) — só os dados. Clone de treino copia `exercicioIds` (trivial, sem arquivo envolvido).
+- **Exercícios substitutos** (`Exercicio.substitutoIds: string[]`) — pra quando o equipamento/máquina está ocupado na academia. Armazenado **de um lado só** (array na "origem"), mas exibido **nos dois sentidos** na listagem: se A aponta pra B como substituto, tanto a linha de A quanto a de B mostram a referência uma da outra (`substitutosDisplayById`, memo local em `lista.tsx` e em `calendario/.../index.tsx` — mesma lógica duplicada nos dois arquivos de propósito, é pequena demais pra justificar extrair). Cada nome é uma linha própria (ícone + nome, clicável — leva pro exercício), **não** texto corrido separado por vírgula (tentativa inicial, usuário achou "extenso" e pediu pra empilhar). Editor: `components/substituto-picker.tsx` (`SubstitutoPicker`) — fechado mostra só os já selecionados como chips removíveis + botão "Adicionar"; abre um modal com a lista completa agrupada por categoria (mesmo padrão do "vincular exercícios ao treino"). Endpoint valida ownership + anti-autorreferência (`resolveSubstitutoIds` em `api/src/routes/exercicios.ts`); excluir um exercício limpa (`$pull`) a referência de quem apontava pra ele.
+- **`CategoryIcon` é sempre um halter** — tinha um mapeamento de ícone por palavra-chave da categoria (peito/costas/perna/etc.), removido a pedido do usuário ("deixe todos halteres", achava o mix inconsistente/como ruído visual). Usado tanto como cabeçalho de grupo/categoria quanto fallback do `ExercicioThumbnail` quando o exercício não tem foto de capa.
+- **`components/category-jump-bar.tsx` (`CategoryJumpBar`) + `hooks/useCategoryScroll.ts`** — barrinha de categorias no topo de toda listagem agrupada (aba Exercícios, treino do calendário, sessão do calendário), clicar rola até o início daquele grupo. **Fica fixa acima do `ScrollView`** (sibling, não dentro do conteúdo rolável) — pedido explícito do usuário, facilita quando a lista é longa. `useCategoryScroll` usa `.measure()` + offset de scroll rastreado manualmente pra calcular a posição do grupo, **não** `measureLayout` com `findNodeHandle` — na Nova Arquitetura (Fabric), `measureLayout` exige que o "ancestral" passado seja uma ref de componente nativo de verdade; um `ScrollView` (composto) ou um handle numérico de `findNodeHandle` disparam `"ref.measureLayout must be called with a ref to a native component"`. A correção certa era `scrollNode.getNativeScrollRef()` (retorna a instância nativa de verdade por trás do `ScrollView`), não o approach de `.measure()`.
+- **Botão de voltar do topo respeita o modo de edição** (`exercicios/lista.tsx`) — `BackHeader` recebe `onBack={creating || editingId ? resetForm : undefined}`. Sem isso, tocar a seta enquanto o formulário de criar/editar está aberto saía **direto da aba** (voltava pra `exercicios/index.tsx`) em vez de só fechar o formulário e mostrar a listagem de novo — o botão físico/gesto do Android já tinha esse comportamento certo (`BackHandler`), só a seta do topo (`BackHeader`) ainda não seguia a mesma regra.
 
 ---
 
@@ -79,41 +85,101 @@ Opção na landing da tab Extras (`extras/index.tsx`) — leva pra `extras/alime
 
 ---
 
-## Editor de sessão (`exercicio-entry-editor.tsx`)
+## Edição de Sets/Reps/Peso
 
-Campos manuais (Sets/Reps/Peso) + "Rápido" (parser de linguagem natural tipo `"3s 10r 10k"`). **Um único botão "Salvar"** salva os 3 campos manuais de uma vez — não é mais salvamento automático por campo no `onBlur` (isso já foi um bug real: cada campo salvava sozinho ao perder foco, gerando saves redundantes). O "Rápido" mantém seu próprio botão de confirmação inline, já salvava em lote desde sempre.
+**`components/inline-log-editor.tsx`** (`InlineLogEditor`) — versão compacta usada **dentro da listagem** (uma por linha, tanto em `exercicios/lista.tsx` quanto em `calendario/[date]/[sessaoId]/index.tsx`): 3 campos pequenos (Sets/Reps/Kg) + campo "Rápido" (parser `"3s 10r 10k"`, `parser/quickEntryParser.ts`), **sem nenhum botão de salvar**. Cada grupo (manual e rápido) commita sozinho quando: o campo perde foco (toca fora), o app vai pra segundo plano (`AppState`), ou a linha desmonta (navegou pra outra tela) — só envia os campos que o usuário realmente tocou (`dirty` ref por campo), então passar o dedo pelos campos sem editar nunca dispara um save à toa. Sem ícone de raio (removido a pedido do usuário — achava que sobrecarregava visualmente a listagem).
+
+`LogField`/`LogFields` (tipos compartilhados) moraram em `components/exercicio-entry-editor.tsx` (componente antigo, **removido** — ver abaixo) e foram realocados pra `types/workout.ts`, já que não são mais exclusivos de um componente de edição.
+
+**Formulário completo** (criar/editar exercício) — usado em **dois lugares agora com a mesma estrutura/ordem de campos**: `exercicios/lista.tsx` (padrão do exercício) e `calendario/.../[exercicioId].tsx` (dentro de uma sessão, mesma tela, mas Sets/Reps/Peso ali gravam na **sessão do dia**, não no padrão do exercício — ver distinção em "Categorias, Exercícios, Treinos"). O componente antigo e mais pesado (`ExercicioEntryEditor`, com "Atual: ...", `GradientButton` de salvar e o parser "Rápido" dentro do próprio formulário) foi **removido** — a versão dentro do calendário foi reescrita pra usar campos simples com auto-save no `onBlur`, igual Nome/Descrição/Carga máxima já faziam ali, unificando o comportamento entre as duas telas (o usuário reclamou explicitamente de estarem "diferentes demais").
 
 ---
 
 ## Calendário
 
-- `calendario/index.tsx` — mês, sem timer (timer foi movido pra dentro da tela de exercício, ver abaixo).
-- `[date]/index.tsx` — toggle de registrar/desregistrar um treino pro dia.
-- `[sessaoId]/index.tsx` — exercícios do treino agrupados por categoria.
-- `[exercicioId].tsx` — edição de nome/descrição/carga máxima, editor de sets/reps/peso, galeria de fotos, botão de histórico, e o **Timer de descanso** no final da tela.
+- `calendario/index.tsx` — mês. **Timer não mora mais aqui** (virou global, ver seção própria abaixo).
+- `[date]/index.tsx` — toggle de registrar/desregistrar um treino pro dia + `DayAgenda` (ver abaixo).
+- `[sessaoId]/index.tsx` — exercícios do treino agrupados por categoria, `CategoryJumpBar` fixo no topo.
+- `[exercicioId].tsx` — mesma estrutura de formulário de `exercicios/lista.tsx` (ver seção acima), com Sets/Reps/Peso gravando na sessão em vez do padrão do exercício.
 - **Imóvel/sessão/exercício removido enquanto você via**: todas essas telas tratam 404 (registro apagado por outro lugar) com uma tela de "removido" + botão voltar, em vez de ficar travado em loading infinito.
+
+### Modo simples/complexo (`calendario/index.tsx`)
+
+Switch nativo (`Switch`, não um botão-toggle customizado — tentativa inicial foi um chip/pill, usuário pediu pra voltar pro comportamento de switch de verdade) persistido via AsyncStorage (`calendario:modoSimples`). Rótulo mostra o **modo atual** (não o modo pra onde vai trocar) — foi implementado ao contrário na primeira tentativa e corrigido. `trackColor={{true, false}}` os dois apontando pro verde da marca, pra ficar verde nos dois estados (só a bolinha desliza).
+
+- **Modo complexo** (padrão): calendário do mês inteiro sempre visível, tocar num dia navega pra `[date]/index.tsx`.
+- **Modo simples**: mostra a data selecionada (hoje por padrão) num card compacto + botão de calendário ao lado; tocar abre o `MonthCalendar` completo logo abaixo (fecha ao selecionar um dia); a agenda daquele dia (`DayAgenda`) aparece direto embaixo, **sem navegar de tela**.
+
+**`components/day-agenda.tsx` (`DayAgenda`)** — extraído de `[date]/index.tsx` pra ser compartilhado entre a tela dedicada e o modo simples (que embute inline em vez de navegar) — evita duplicar a lógica de "Registrado neste dia" + "Vincular a este dia". Contém também o checkbox de presença (ver abaixo).
+
+### Presença ("fui na academia") + Relatórios
+
+Checkbox no topo do `DayAgenda` ("Fui na academia neste dia") — modelo `Attendance` (`api/src/models/Attendance.ts`): **um documento por dia marcado**, existência é o sinal (não tem campo booleano pra virar false, desmarcar = deletar o documento). Índice único `{userId, date}`.
+
+- `GET/PUT /api/attendance/:date` (dia único, usado pelo checkbox), `GET /api/attendance/month?year=&month=` (lista de dias marcados no mês, usado pra marcar no `MonthCalendar`), `GET /api/attendance/summary/:year` (contagem por mês do ano, usado nos Relatórios). Rotas `/month` e `/summary/:year` registradas **antes** de `/:date` — senão o wildcard de um segmento (`:date`) engole essas rotas mais específicas.
+- **`MonthCalendar` ganhou `attendanceDates?: Set<string>`** — renderiza um **anel laranja** (`Brand.accent`, não verde) ao redor do círculo do dia, separado do "hoje" (círculo verde cheio) e da bolinha de treino (`markedDates`/`dot`) — os três podem aparecer juntos no mesmo dia sem conflitar (anel é borda, não some com o preenchimento).
+- **Legenda**: botão "Legenda" (não fica sempre visível — testado assim primeiro, ficava "socado"/apertado) que mede a própria posição (`measureInWindow`) e abre um card flutuante num `Modal` transparente logo abaixo, com fundo **`theme.background`** (não `theme.backgroundElement`, que é a mesma cor do card do calendário por baixo e fazia a legenda "sumir" atrás dele).
+- **Extras > Relatórios** (`extras/relatorios.tsx`) — tiles "Este mês"/"Este ano" (sempre fixos no ano/mês reais, não afetados pelo seletor abaixo) + gráfico de barras horizontais por mês, navegável por ano. Barras num único tom (`Brand.primary`/`Brand.primaryDark` pro mês atual) — é uma série só (contagem), não precisa de paleta categórica.
 
 ---
 
-## Timer de descanso (`app/src/components/rest-timer.tsx` + `app/src/notifications/timerAlarmService.ts`)
+## Timer de descanso — global (`stores/timerStore.ts` + `notifications/timerAlarmService.ts`)
 
-Usa **`@notifee/react-native`** (não `expo-notifications` — removido do projeto, não é mais usado em lugar nenhum). Motivo da troca: precisa vibrar/tocar continuamente mesmo com a tela desligada, o que exige um serviço em primeiro plano de verdade (fora do escopo do `expo-notifications`).
+**Não é mais um componente local de tela** — virou um store Zustand global (`useTimerStore`), porque o timer precisa continuar contando/tocando/ser visível **independente de qual tela está aberta**. Acessível em **Extras > Timer** (`extras/timer.tsx`, UI completa: `components/rest-timer.tsx`) e, quando ativado, também como uma **barra fixa acima das abas** (`components/mini-timer-bar.tsx`, montada em `(tabs)/_layout.tsx`).
 
-**Pontos não-óbvios:**
-- **`AlarmType.SET_ALARM_CLOCK`** no trigger — é o mesmo mecanismo exato que despertadores nativos usam, imune ao Doze/economia de bateria do Android. Sem isso, a notificação pode atrasar minutos com a tela desligada.
-- **Serviço em primeiro plano** (`notifee.registerForegroundService`, registrado em escopo de módulo, não dentro do componente) mantém `Vibration.vibrate(pattern, true)` rodando até o usuário tocar "Pausar" ou "+1 min" — pela notificação (`actions` com `pressAction.id`) ou dentro do app.
-- **Canais Android são imutáveis após criados** — mudar `vibrationPattern`/`sound` de um canal já existente no aparelho não tem efeito nenhum aí; é preciso versionar o `channelId` (`CHANNEL_VERSION` em `timerAlarmService.ts`) pra forçar um canal novo.
-- **`vibrationPattern` do notifee exige array só com valores positivos e quantidade par** — diferente da API `Vibration` pura do RN, que aceita um `0` inicial como "atraso". Não usar padrão com `0` líder aqui.
-- **`sound: 'default'`** no canal do notifee **é** o valor certo pro som padrão do sistema (diferente do `expo-notifications`, onde isso quebrava — cuidado ao comparar as duas libs).
-- **Setup de canal roda uma vez só por sessão** (`channelsReadyPromise` cacheado em `ensureChannels()`) — repetir isso a cada Play adicionava lentidão que abria brecha pra condição de corrida em cliques rápidos (Play/Pause/Play gerava notificações órfãs). Tem proteção por número de geração (`generationRef`) contra chamadas sobrepostas — qualquer mudança nesse arquivo deve preservar esse padrão.
-- **`app.notifee:core` é um Maven repo local** dentro do próprio pacote (`node_modules/@notifee/react-native/android/libs`), não publicado remotamente — sem registrar isso em `android/build.gradle` (`allprojects.repositories`), o build falha com "no versions of app.notifee:core are available". O notifee **não** tem plugin de config do Expo, então isso não é automático.
-- **Limite real**: só funciona com o app vivo (aberto ou em segundo plano) — se o Android matar o processo por completo, a notificação/vibração de conclusão ainda dispara (é nativo, independente do JS), mas as ações de pausar/snooze não têm como sincronizar o estado da tela do app (não tem UI pra sincronizar, já que o processo morreu).
+Usa **`@notifee/react-native`** (não `expo-notifications` — removido do projeto). Motivo: precisa vibrar continuamente mesmo com a tela desligada/app minimizado, o que exige um serviço em primeiro plano de verdade.
+
+### Barra fixa (`MiniTimerBar`)
+
+Switch em Extras > Timer ("Barra fixa") liga/desliga; junto dele, um seletor do preset padrão que a barra assume quando ativada. A barra fica **colada acima da tab bar de verdade** (não é um overlay flutuante por cima do conteúdo): `(tabs)/_layout.tsx` aumenta a altura do `tabBarStyle` (soma `MINI_TIMER_BAR_HEIGHT`) e usa `paddingTop` igual a essa altura — isso empurra os ícones das abas pra baixo, sobrando o espaço de cima livre pra barra, e o React Navigation **encolhe a área de conteúdo de toda tela sob as abas automaticamente** (não precisa mexer em cada tela individualmente pra abrir espaço).
+
+### Notificação "em andamento" + notificação de conclusão (duas notificações separadas)
+
+- **`RUNNING_NOTIFICATION_ID`** — exibida assim que o timer começa (`showRunningNotification`), com `showChronometer: true` + `chronometerDirection: 'down'` (cronômetro nativo do Android, contando sozinho, sem JS mantendo ela atualizada). Canal próprio, baixa importância, **sem som/vibração** (`RUNNING_CHANNEL_ID`) — só um indicador visual "ainda rodando".
+- **`TIMER_NOTIFICATION_ID`** — o alarme de verdade, um `createTriggerNotification` com `AlarmType.SET_ALARM_CLOCK` (mesmo mecanismo de despertador nativo, imune ao Doze) e `asForegroundService: true`. Quando dispara, o serviço em primeiro plano (`notifee.registerForegroundService`, registrado em escopo de módulo) cancela a notificação "em andamento" e começa a vibrar.
+- **Vibração limitada a 30s** (`MAX_VIBRATION_MS`) — `Vibration.vibrate(pattern, true)` não tem limite embutido; sem o `setTimeout` cancelando sozinho, vibra pra sempre até o usuário interagir.
+- **Rede de segurança no JS** (`timerStore.ts`, dentro de `tick()`) — se por algum motivo o alarme nativo nunca disparar de verdade (permissão de alarme exato negada, processo morto, etc.), o app, ao perceber localmente (via `AppState` ao reabrir) que o tempo já passou, cancela a notificação "em andamento" sozinho — sem isso, o cronômetro nativo continua contando pra números negativos pra sempre, já que nada mais o avisa pra parar.
+
+### Permissão de "Alarmes e lembretes" (`SCHEDULE_EXACT_ALARM`, Android 12+)
+
+Diferente de `POST_NOTIFICATIONS`, não tem popup simples — só uma tela de Configurações que o usuário ativa manualmente por app. `ensureAlarmPermission()` verifica via `notifee.getNotificationSettings()` (`settings.android.alarm`) e chama `notifee.openAlarmPermissionSettings()` se não estiver `ENABLED`, antes de todo `scheduleTimerAlarm`. Sem essa permissão, o Android tende a **adiar a entrega do alarme** até o app voltar ao primeiro plano — sintoma: "só vibra quando eu abro o app de novo".
+
+### Canais Android — imutáveis, versionados, e **precisam ser limpos manualmente**
+
+- Mudar `vibrationPattern`/`sound`/`importance` de um canal já criado no aparelho não tem efeito nenhum ali — é preciso versionar o `channelId` (`CHANNEL_VERSION`) pra forçar um canal novo.
+- **Bug real corrigido**: cada bump de `CHANNEL_VERSION` cria canais novos mas **nunca apaga os antigos** (canal Android sobrevive a rebuild/update do app, só some com desinstalação completa) — usuário viu ~9 "Timer de descanso" duplicados na tela de notificações do celular depois de várias reinstalações ao longo da sessão. Fix: `pruneOldChannels()` roda dentro de `ensureChannels()` a cada `scheduleTimerAlarm`, lista todos os canais existentes (`notifee.getChannels()`) e apaga (`notifee.deleteChannel()`) qualquer um com prefixo `timer-alarm-`/`timer-running-` que não seja um dos IDs da versão atual.
+- **`vibrationPattern` do notifee exige array só com valores positivos e quantidade par** — diferente da `Vibration` pura do RN, que aceita `0` inicial como "atraso".
+- **Setup de canal roda uma vez só por sessão** (`channelsReadyPromise` cacheado) — protegido por número de geração (`generation`, em `timerStore.ts`) contra condição de corrida em cliques rápidos de Play/Pause.
+
+### Ícone de notificação
+
+**Bug real corrigido**: notificação aparecia com uma caixinha preta em vez de ícone. Notificação Android precisa de um ícone **monocromático** (silhueta branca, fundo transparente) — o sistema mascara qualquer cor, e sem um ícone dedicado ele tenta usar o ícone colorido do app (launcher), que vira essa caixa preta. Ícone gerado (mesmo halter do `AuthBadge`, branco) em `assets/images/notification-icon.png`, copiado pro recurso Android via plugin (`withNotificationIcon.js`, ver abaixo) e referenciado como `smallIcon: 'ic_notification'` nas duas notificações.
+
+### Bug real corrigido — funciona em debug (Android Studio), quebra no APK de release
+
+Build de **release** roda R8/minificação (debug não roda por padrão) — como nada no código do app referencia as classes do notifee pelo nome (só o `AndroidManifest.xml`, via `<service android:name="app.notifee.core.ForegroundService">`), o R8 pode remover/renomear essas classes sem perceber que são necessárias, quebrando o serviço em primeiro plano **silenciosamente**, só em release. Fix: regras `-keep class app.notifee.core.** { *; }` e `-keep class io.invertase.notifee.** { *; }` em `android/app/proguard-rules.pro` (durável via plugin `withNotifeeProguardRules.js`, já que `android/` é gerado/descartável).
+
+### `android/` é descartável (gitignored) — mudanças nativas do notifee viram plugins de config
+
+Como a pasta `android/` não é versionada (Continuous Native Generation — `npx expo prebuild --clean` recria do zero), qualquer ajuste nativo precisa ser um **plugin de Expo config** em `plugins/`, referenciado em `app.json > plugins`, senão some no próximo prebuild. Quatro plugins criados pra esse recurso, nenhum tem plugin oficial do notifee equivalente:
+- **`withNotifeeMavenRepo.js`** — `app.notifee:core` só existe num Maven repo **local**, empacotado dentro do próprio `node_modules` (não está no Google Maven/Maven Central/JitPack). O próprio `build.gradle` do notifee tenta se registrar via `rootProject.allprojects{repositories{...}}`, mas isso roda tarde demais quando o Gradle usa `--configure-on-demand` (flag que `expo run:android` sempre passa) — bug antigo, nunca corrigido upstream (o notifee está arquivado/descontinuado). Fix: registra o repo local diretamente no `build.gradle` raiz.
+- **`withNotifeeForegroundService.js`** — declara `<service android:name="app.notifee.core.ForegroundService" android:foregroundServiceType="systemExempted">` no manifest (obrigatório a partir do Android 14; `systemExempted` é o tipo recomendado pra apps de alarme/timer que seguram `SCHEDULE_EXACT_ALARM`).
+- **`withNotificationIcon.js`** — copia `assets/images/notification-icon.png` pra `android/app/src/main/res/drawable/ic_notification.png` a cada prebuild.
+- **`withNotifeeProguardRules.js`** — injeta as regras de `-keep` (ver bug de release acima) em `android/app/proguard-rules.pro`.
+
+### Permissões necessárias (`app.json > android.permissions`)
+
+`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `WAKE_LOCK`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SYSTEM_EXEMPTED`.
+
+### Restrições específicas de fabricante (MIUI/Xiaomi e similares)
+
+Mesmo com tudo acima correto, fabricantes como Xiaomi têm restrições **próprias**, além das do Android puro, que podem impedir o serviço em segundo plano de funcionar: "Início automático" (Autostart) desativado pro app, e economia de bateria "restrita" em vez de "sem restrições". Não tem como contornar isso via código — é o usuário quem precisa liberar manualmente nas Configurações do aparelho.
 
 ---
 
 ## Toast (`app/src/components/toast.tsx`)
 
-`showToast(mensagem, tipo?)` — `'success'` (verde, padrão) ou `'error'` (vermelho). Posição calculada dinamicamente: acima da tab bar (`64 + insets.bottom + gap`) nas telas com tabs (`/calendario`, `/exercicios`, `/treinos`), posição fixa mais baixa nas telas sem tab bar (auth, perfil) — sem isso, o toast ficava sobreposto às tabs.
+`showToast(mensagem, tipo?)` — `'success'` (verde, padrão) ou `'error'` (vermelho). **Ancorado no topo da tela** (`insets.top + gap`), não mais acima da tab bar — mudou depois que a barra fixa do timer passou a ocupar esse espaço (ver seção do Timer); embaixo ficava fácil de esconder atrás da `MiniTimerBar` ou das próprias abas.
 
 ## LoadingView (`app/src/components/loading-view.tsx`)
 
@@ -123,13 +189,26 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
 
 `AppTheme` tem `android:windowBackground` setado pra mesma cor da splash (`@color/splashscreen_background`) — sem isso, qualquer vão entre a splash sumir e o React desenhar algo mostra a cor padrão do Android (preto no tema escuro). Mudança nativa, só some do teste depois de rebuild completo (`expo run:android`), reload de JS não pega.
 
+## Fonte (Poppins) e identidade visual
+
+- **`@expo-google-fonts/poppins`** carregado via `useFonts` em `app/_layout.tsx` (splash nativa só libera quando tema **e** fonte estiverem prontos — evita flash trocando de fonte na tela). `constants/theme.ts` exporta `FontFamily` (`regular`/`medium`/`semibold`/`bold`/`extrabold`) mapeado nos estilos de `ThemedText`.
+- **Cada peso do Poppins é um arquivo/família separado** (não é fonte variável) — `ThemedText` seta `fontFamily` direto por `type`, **sem** `fontWeight` junto. Texto que força negrito via `fontWeight` inline (fora do `type` do `ThemedText`) não pega o peso certo de forma confiável, principalmente no Android — poucos lugares assim ainda existem no app (ex: número do timer), aceito como imperfeição cosmética menor.
+- **Ícone do app e splash** — antes eram o ícone padrão de template do Expo (símbolo azul), nunca customizados. Agora replicam o `AuthBadge` (badge verde em gradiente + halter branco + faísca laranja), gerados como PNG a partir de um SVG desenhado à mão (halter = 3 retângulos arredondados, sem depender de fonte de ícone). Cor de fundo da splash e do ícone adaptativo do Android trocada de azul (`#208AEF`)/azul claro (`#E6F4FE`) pro verde da marca (`#15b580`). `assets/expo.icon` (bundle de ícone multi-aparência do iOS 18, também nunca customizado) foi removido — iOS usa o `icon.png` geral agora.
+
 ---
 
 ## Deploy e build
 
-- **API no Render** (`https://gym-bro-native.onrender.com`) — plano free hiberna após inatividade, cold start pode levar dezenas de segundos. MongoDB Atlas precisa de `0.0.0.0/0` liberado em Network Access (Render não tem IP fixo).
-- **`.env` do app fica gravado dentro do APK no build** — não é lido em runtime. Pra local: `http://10.0.2.2:4000` (só funciona no emulador). Pra produção: a URL do Render.
+- **API migrando do Render pro Northflank** — motivo: plano free do Render hiberna após inatividade (cold start de dezenas de segundos); Northflank tem um plano grátis ("Developer Sandbox") que fica **sempre ligado**, sem hibernar. MongoDB continua o mesmo (Atlas, `0.0.0.0/0` liberado em Network Access) — só o host da API muda, o banco não se move.
+  - **Deployment target**: "Northflank Cloud" (não "Bring Your Own Cloud" — essa exige conta própria em AWS/GCP/etc., sem tier grátis).
+  - **Build**: usar **Buildpack (Heroku)**, não Dockerfile (a API não tem um). Buildpacks só rodam o passo de build TypeScript automaticamente se existir um script `heroku-postbuild` — `api/package.json` ganhou `"heroku-postbuild": "tsc"` só por causa disso (idêntico ao `build` já existente, é uma convenção de nome que o buildpack procura).
+  - **Root directory do build**: apontar pra `api` (o repo tem `app/` e `api/` juntos).
+  - **Porta**: não colar `PORT=4000` nas environment variables do Northflank — a plataforma injeta `PORT` sozinha com o valor configurado na aba Networking (ex: 8080), e o código já lê de `process.env.PORT` (`api/src/utils/env.ts`). Colar um `PORT` manual por cima conflita com o que o Networking configurou.
+  - **Environment variables**: recriar todas as do `.env` (Mongo, JWT, Resend, R2, Gmail, `CORS_ORIGIN`) — não dependem de qual host roda a API.
+  - URL fica no formato `https://site--<projeto>--<hash>.code.run` — testar `/api/health` antes de trocar o `EXPO_PUBLIC_API_URL` do app.
+- **`.env` do app fica gravado dentro do APK no build** — não é lido em runtime. Pra local: `http://10.0.2.2:4000` (só funciona no emulador). Pra produção: a URL da API hospedada (Render ou Northflank).
 - **Gerar APK menor**: `gradle.properties` tem `android.enableMinifyInReleaseBuilds`/`enableShrinkResourcesInReleaseBuilds` ligados (só afeta `release`, não o `debug` do emulador). Pra instalar no celular físico, sempre usar `-PreactNativeArchitectures=arm64-v8a` (senão builda pra 4 arquiteturas, ~4x o tamanho — não mudar o padrão do `gradle.properties`, isso quebraria o emulador x86).
+- **Minificação de release pode quebrar módulo nativo silenciosamente** (ver bug do notifee na seção do Timer) — se algo funciona no `expo run:android`/Android Studio (debug, sem minificação) mas falha só no APK instalado (release, minificado), suspeitar de regra de ProGuard faltando antes de qualquer outra coisa.
 - **`--rerun-tasks` obrigatório** ao gerar o APK de release: o Gradle não rastreia o `.env` como input de task, então reaproveita o bundle JS antigo silenciosamente se só o `.env` mudou. Comando completo:
   ```powershell
   cd android
@@ -144,3 +223,38 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
 - **`nvm4w` reverte pra Node 16 sozinho** entre sessões — quebra `expo lint`/scripts que precisam de Node 18+. Rodar `nvm use 22.12.0` quando `Blob is not defined` ou erros parecidos aparecerem.
 - **Build nativo (ninja/cmake) trava em caminhos longos/com espaço** — o projeto já foi movido de `E:\Projetos - Backup Google Drive\...` pra `E:\Projetos\...` justamente por isso (caminho mais curto resolveu builds que travavam com "manifest still dirty after 100 tries").
 - **Emulador**: `Pixel_5_API_31` e `Pixel_7_API_35` já configurados — pode abrir direto via `emulator.exe -avd <nome>` sem precisar do Android Studio pra isso.
+
+---
+
+## Web (`web/`)
+
+Companion desktop do app RN — mesma API, mesmo banco, sem timer de descanso (não faz sentido fora do celular). Stack: Vite + Vue 3 + Vuetify 3, **sem** Nuxt/SSR (SPA pura, `vue-router` com `createWebHistory`, Pinia só pra auth). Layout de dashboard com sidebar fixa (verde, gradiente, mesma cor da marca `#15b580`) em vez do layout de abas do RN — funcionalidade replicada, visual não.
+
+### Autenticação — dual-mode na mesma API Express
+
+O app RN usa Bearer token no body/header (token de acesso em memória, refresh no `SecureStore`) — isso **não podia quebrar**. Em vez de criar um servidor proxy/BFF separado (chegou a ser tentado numa sessão anterior com Nuxt, descartado), a própria API Express (`api/src`) ganhou suporte a cookies httpOnly **além** do Bearer existente:
+
+- `utils/cookies.ts` — `setAuthCookies`/`clearAuthCookies` (`access_token`/`refresh_token`, `httpOnly`, `sameSite: 'lax'`, `secure` via `AUTH_COOKIE_SECURE` no `.env`).
+- `middleware/requireAuth.ts` — aceita `Authorization: Bearer` (RN, como sempre) **ou**, se ausente, o cookie (web). Header tem prioridade.
+- `routes/auth.ts` — `login`/`register` setam os cookies **além de** devolver os tokens no corpo (RN inalterado). `POST /refresh` aceita `refreshToken` do body (RN) **ou** do cookie (web, sem precisar mandar body nenhum). `logout` limpa os cookies.
+- `app.ts` — `cors({ origin: env.corsOrigin, credentials: true })` — com `credentials: true` o pacote `cors` não aceita `origin: '*'`; `CORS_ORIGIN` no `.env` precisa ser a URL exata do `web/` (dev: `http://localhost:5173`).
+
+O client HTTP do `web/` (`src/api/client.ts`) nunca guarda token nenhum em JS — `fetch` sempre com `credentials: 'include'`, um 401 dispara `POST /auth/refresh` (cookie viaja sozinho) e reexecuta a chamada original uma vez.
+
+### Campos adicionados aos modelos Mongo (não-destrutivos)
+
+Pra suportar reordenação por drag-and-drop no `web/`, `Exercicio` e `Categoria` ganharam `ordem: { type: Number, default: () => Date.now() }` — `GET /` de ambos passou a ordenar por `ordem, nome` em vez de só `nome`. Documentos existentes (criados antes do campo existir) ficam com `ordem` ausente/`0` até serem arrastados pela primeira vez, aí recebem um valor novo — sem migração necessária. `Categoria` também ganhou `descricao` opcional (mesmo padrão do `Exercicio.descricao`). RN não usa nenhum dos dois campos — não quebra, só reordena por algo que não é mais estritamente alfabético.
+
+### Padrão de drag-and-drop — handle-only, não a linha inteira
+
+**Bug real corrigido**: a linha inteira (`VListItem`/row) começava com `draggable="true"`, então qualquer gesto de clique com um mínimo de movimento em cima de um filho (chip de substituto, botão de editar/excluir, link do nome) podia ser sequestrado pelo `dragstart` do HTML5 DnD nativo em vez de disparar o clique normal. Fix aplicado em `ExerciciosPage.vue`, `CategoriasPage.vue` e `RefeicaoEditorPage.vue` (blocos): a linha usa `:draggable="dragHandleId === item.id"` (falso por padrão) e só o ícone de grip (`mdi-drag-vertical`) liga isso via `@mousedown`/`@mouseup` — o resto da linha volta a ser clicável normalmente. Reordenar calcula um `ordem` fracionário (média entre os vizinhos novos, ou ±1 na ponta) e persiste só o item movido via `PATCH` — não reescreve a lista inteira.
+
+### `PageHeader.vue` + `usePageTitle` — título mora na topbar, não inline na página
+
+Diferente do RN (cabeçalho dentro de cada tela), o `web/` tem uma `VAppBar` fixa (`layouts/AppShell.vue`) mostrando título/subtítulo da página atual. Cada página usa `<PageHeader title="..." subtitle="..." back="..." />`, que **não renderiza o título** — só registra o texto no composable `usePageTitle` (estado reativo module-level) via `watch(..., { immediate: true })`, e opcionalmente renderiza inline o botão de voltar e um slot de `#actions` (botões específicos da página, tipo "Nova categoria"). A topbar em si é só identidade + menu do usuário (Conta/Sair) — sem ações de página.
+
+### Convenções visuais dos formulários
+
+- **Label acima do campo, não label flutuante** — `VTextField`/`VSelect` sem prop `label`, com um `<label class="field-label">` próprio acima e `placeholder` dentro do campo. Padrão usado em `ExercicioForm.vue`, `RefeicaoEditorPage.vue`, `TreinoEditorPage.vue`, `ContaPage.vue`, `CategoriasPage.vue` — reaproveitar em telas novas em vez de voltar pro label flutuante padrão do Vuetify.
+- **Badge circular colorido antes do título de cada `VCardTitle`** — `<span class="section-icon"><VIcon .../></span>`, 26-40px, fundo `rgba(var(--v-theme-primary), 0.14)`. Não usar ícone específico por categoria/grupo muscular (nome de categoria é texto livre, mapear pra ícone certo é frágil e já foi tentado e rejeitado no RN — ver `CategoryIcon` acima); usar sempre o mesmo ícone genérico.
+- **Tema claro/escuro** — `useThemeMode` (`localStorage` key `gymbro-theme-mode`), tema inicial lido de forma síncrona em `plugins/vuetify.ts` (não depois do mount) pra não ter flash de tema errado. Verde permanece o `primary` nos dois temas; só background/surface mudam.

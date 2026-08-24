@@ -1,17 +1,20 @@
 import { randomUUID } from 'crypto';
 
 import express, { Router } from 'express';
+import sharp from 'sharp';
 
 import { requireAuth } from '../middleware/requireAuth';
 import { Exercicio } from '../models/Exercicio';
 import { Treino } from '../models/Treino';
 import { asyncHandler } from '../utils/asyncHandler';
 import { deleteImageFromR2, uploadImageToR2 } from '../utils/storage';
-import { createExercicioSchema, updateExercicioSchema } from '../validation/workout';
+import { createExercicioSchema, reorderExercicioSchema, updateExercicioSchema } from '../validation/workout';
 
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_EXERCICIOS = 100;
+const CAPA_THUMB_MAX_SIZE = 300;
+const CAPA_THUMB_QUALITY = 82;
 
 const router = Router();
 router.use(requireAuth);
@@ -42,7 +45,7 @@ async function resolveSubstitutoIds(
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const exercicios = await Exercicio.find({ userId: req.user!.id }).select('-historico').sort({ nome: 1 });
+    const exercicios = await Exercicio.find({ userId: req.user!.id }).select('-historico').sort({ ordem: 1, nome: 1 });
     res.status(200).json({ exercicios });
   })
 );
@@ -162,6 +165,28 @@ router.patch(
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
       { $set: setOps, $push: { historico: { $each: [snapshot], $slice: -50 } } },
+      { new: true }
+    ).select('-historico');
+    if (!exercicio) {
+      res.status(404).json({ error: 'Exercício não encontrado' });
+      return;
+    }
+    res.status(200).json({ exercicio });
+  })
+);
+
+// Dedicated endpoint for drag-and-drop reordering (web today, mobile eventually): unlike the
+// general PATCH /:id above, this never touches historico — dragging an exercise to a new spot
+// isn't a content edit, and reusing the general route made every reorder push a bogus
+// "before/after" snapshot with identical nome/sets/reps/pesoKg (only ordem actually changed).
+router.patch(
+  '/:id/ordem',
+  asyncHandler(async (req, res) => {
+    const { ordem } = reorderExercicioSchema.parse(req.body);
+
+    const exercicio = await Exercicio.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user!.id },
+      { $set: { ordem } },
       { new: true }
     ).select('-historico');
     if (!exercicio) {
@@ -343,6 +368,36 @@ router.delete(
     }
 
     res.status(200).json({ exercicio });
+  })
+);
+
+// Re-encoded server-side (not proxied as-is) because the R2 bucket has no CORS policy, so the
+// browser can't downscale the original via canvas itself — see the treino print PDF, whose file
+// size otherwise scaled with the original photo resolution instead of the ~90px it's shown at.
+router.get(
+  '/:id/capa/thumb',
+  asyncHandler(async (req, res) => {
+    const exercicio = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id }).select('capa');
+    if (!exercicio?.capa) {
+      res.status(404).json({ error: 'Imagem não encontrada' });
+      return;
+    }
+
+    const original = await fetch(exercicio.capa.url);
+    if (!original.ok) {
+      res.status(502).json({ error: 'Não foi possível buscar a imagem original' });
+      return;
+    }
+
+    const buffer = Buffer.from(await original.arrayBuffer());
+    const thumb = await sharp(buffer)
+      .resize(CAPA_THUMB_MAX_SIZE, CAPA_THUMB_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: CAPA_THUMB_QUALITY })
+      .toBuffer();
+
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.status(200).send(thumb);
   })
 );
 
