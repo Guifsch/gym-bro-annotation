@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/requireAuth';
 import { Exercicio } from '../models/Exercicio';
 import { Treino } from '../models/Treino';
 import { asyncHandler } from '../utils/asyncHandler';
+import { detectImageContentType } from '../utils/imageValidation';
 import { deleteImageFromR2, uploadImageToR2 } from '../utils/storage';
 import { createExercicioSchema, reorderExercicioSchema, updateExercicioSchema } from '../validation/workout';
 
@@ -40,6 +41,32 @@ async function resolveSubstitutoIds(
     return { ok: false, error: 'Exercício substituto não encontrado' };
   }
   return { ok: true, value: uniqueIds };
+}
+
+/** Substitute is a mutual relationship — if A lists B, B should list A too. `substitutoIds` is
+ * only ever written from the "origin" side, so every write here also pushes/pulls the origin's
+ * own id on the other side, diffing against what was there before to know which side changed. */
+async function syncReciprocalSubstitutos(
+  userId: string,
+  exercicioId: string,
+  previousIds: string[],
+  newIds: string[]
+): Promise<void> {
+  const added = newIds.filter((id) => !previousIds.includes(id));
+  const removed = previousIds.filter((id) => !newIds.includes(id));
+
+  if (added.length > 0) {
+    await Exercicio.updateMany(
+      { _id: { $in: added }, userId },
+      { $addToSet: { substitutoIds: exercicioId } }
+    );
+  }
+  if (removed.length > 0) {
+    await Exercicio.updateMany(
+      { _id: { $in: removed }, userId },
+      { $pull: { substitutoIds: exercicioId } }
+    );
+  }
 }
 
 router.get(
@@ -90,6 +117,11 @@ router.post(
       },
       { upsert: true, new: true }
     );
+
+    if (!existing && resolved.value && resolved.value.length > 0) {
+      await syncReciprocalSubstitutos(req.user!.id, id, [], resolved.value);
+    }
+
     res.status(201).json({ exercicio });
   })
 );
@@ -171,6 +203,11 @@ router.patch(
       res.status(404).json({ error: 'Exercício não encontrado' });
       return;
     }
+
+    if (resolved.value !== undefined) {
+      await syncReciprocalSubstitutos(req.user!.id, req.params.id!, existing.substitutoIds, resolved.value);
+    }
+
     res.status(200).json({ exercicio });
   })
 );
@@ -278,6 +315,14 @@ router.post(
       return;
     }
 
+    // Content-Type is client-declared and trivially spoofable — trust the actual bytes instead
+    // for what gets stored/served.
+    const detectedType = detectImageContentType(buffer);
+    if (!detectedType) {
+      res.status(400).json({ error: 'Arquivo não é uma imagem válida' });
+      return;
+    }
+
     const exercicio = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id });
     if (!exercicio) {
       res.status(404).json({ error: 'Exercício não encontrado' });
@@ -289,7 +334,7 @@ router.post(
       return;
     }
 
-    const { key, url } = await uploadImageToR2(buffer, contentType, req.user!.id, 'exercicios');
+    const { key, url } = await uploadImageToR2(buffer, detectedType, req.user!.id, 'exercicios');
     exercicio.imagens.push({ url, key });
     await exercicio.save();
 
@@ -334,6 +379,14 @@ router.post(
       return;
     }
 
+    // Content-Type is client-declared and trivially spoofable — trust the actual bytes instead
+    // for what gets stored/served.
+    const detectedType = detectImageContentType(buffer);
+    if (!detectedType) {
+      res.status(400).json({ error: 'Arquivo não é uma imagem válida' });
+      return;
+    }
+
     const exercicio = await Exercicio.findOne({ _id: req.params.id, userId: req.user!.id });
     if (!exercicio) {
       res.status(404).json({ error: 'Exercício não encontrado' });
@@ -341,7 +394,7 @@ router.post(
     }
 
     const oldCapa = exercicio.capa;
-    const { key, url } = await uploadImageToR2(buffer, contentType, req.user!.id, 'exercicios');
+    const { key, url } = await uploadImageToR2(buffer, detectedType, req.user!.id, 'exercicios');
     exercicio.capa = { url, key };
     await exercicio.save();
     if (oldCapa) {

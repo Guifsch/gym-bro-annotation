@@ -10,6 +10,10 @@ export interface AuthUserClaims {
   email: string;
 }
 
+export interface RefreshTokenClaims extends AuthUserClaims {
+  tokenVersion: number;
+}
+
 export function hashUserPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
@@ -19,19 +23,29 @@ export function checkPassword(password: string, passwordHash: string): Promise<b
 }
 
 export function signAccessToken(claims: AuthUserClaims): string {
-  return jwt.sign(claims, env.authAccessTokenSecret, { expiresIn: env.authAccessTokenTtl } as jwt.SignOptions);
+  return jwt.sign(claims, env.authAccessTokenSecret, {
+    expiresIn: env.authAccessTokenTtl,
+    algorithm: 'HS256',
+  } as jwt.SignOptions);
 }
 
-export function signRefreshToken(claims: AuthUserClaims): string {
-  return jwt.sign(claims, env.authRefreshTokenSecret, { expiresIn: env.authRefreshTokenTtl } as jwt.SignOptions);
+// Access tokens stay short-lived and fully stateless (no DB hit on every request). Refresh
+// tokens carry tokenVersion instead, checked once per /refresh call against the user's current
+// value in the DB — that's what lets logout/password-change actually revoke a 30-day-lived
+// refresh token, at the cost of a stolen access token still working until its own ~15min expiry.
+export function signRefreshToken(claims: AuthUserClaims, tokenVersion: number): string {
+  return jwt.sign({ ...claims, tokenVersion }, env.authRefreshTokenSecret, {
+    expiresIn: env.authRefreshTokenTtl,
+    algorithm: 'HS256',
+  } as jwt.SignOptions);
 }
 
 export function verifyAccessToken(token: string): AuthUserClaims {
-  return jwt.verify(token, env.authAccessTokenSecret) as AuthUserClaims;
+  return jwt.verify(token, env.authAccessTokenSecret, { algorithms: ['HS256'] }) as AuthUserClaims;
 }
 
-export function verifyRefreshToken(token: string): AuthUserClaims {
-  return jwt.verify(token, env.authRefreshTokenSecret) as AuthUserClaims;
+export function verifyRefreshToken(token: string): RefreshTokenClaims {
+  return jwt.verify(token, env.authRefreshTokenSecret, { algorithms: ['HS256'] }) as RefreshTokenClaims;
 }
 
 export function createEmailOneTimeCode(): string {

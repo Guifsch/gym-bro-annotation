@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
@@ -20,8 +20,13 @@ import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useCategoryScroll } from '@/hooks/useCategoryScroll';
 import type { Categoria, Exercicio, Treino } from '@/types/workout';
+
+interface CategoriaSection {
+  categoriaId: string;
+  nome: string;
+  data: Exercicio[];
+}
 
 export default function TreinoEditorScreen() {
   const { treinoId } = useLocalSearchParams<{ treinoId: string }>();
@@ -54,7 +59,8 @@ export default function TreinoEditorScreen() {
     }, [load])
   );
 
-  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
+  const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
+  const headerRefs = useRef<Record<string, View | null>>({});
 
   const categoriaNomeById = useMemo(
     () => Object.fromEntries(categorias.map((c) => [c._id, c.nome])),
@@ -76,6 +82,26 @@ export default function TreinoEditorScreen() {
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [exercicios, categoriaNomeById]);
+
+  const sections = useMemo<CategoriaSection[]>(
+    () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
+    [gruposPorCategoria]
+  );
+
+  // Same fix as the other two grouped listings: `scrollToLocation` throws when the target section
+  // hasn't been measured yet (silent in release builds, so the jump bar just did nothing) —
+  // measure the header directly instead, via the SectionList's underlying native scroll node.
+  function scrollToCategory(categoriaId: string) {
+    const node = headerRefs.current[categoriaId];
+    const scrollResponder = sectionListRef.current?.getScrollResponder();
+    const nativeScrollRef = scrollResponder?.getNativeScrollRef();
+    if (!node || !scrollResponder || !nativeScrollRef) return;
+    node.measureLayout(
+      nativeScrollRef,
+      (_x, y) => scrollResponder.scrollTo({ y: Math.max(0, y - 8), animated: true }),
+      () => {}
+    );
+  }
 
   async function handleSaveNome() {
     setSavingNome(true);
@@ -147,78 +173,90 @@ export default function TreinoEditorScreen() {
         {gruposPorCategoria.length > 0 && (
           <CategoryJumpBar
             categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
-            onSelect={scrollToGroup}
+            onSelect={scrollToCategory}
           />
         )}
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Card style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <LabeledTextField label="Nome do treino" value={nome} onChangeText={setNome} maxLength={50} />
-            </View>
-            <GradientButton title="Salvar" onPress={handleSaveNome} loading={savingNome} disabled={!nome.trim()} />
-          </Card>
-
-          <ThemedText type="smallBold">Exercícios</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Toque para vincular ou desvincular deste treino.
-          </ThemedText>
-
-          {exercicios.length === 0 ? (
-            <EmptyState icon="barbell-outline" title="Nenhum exercício cadastrado ainda (crie na tab Exercícios)." />
-          ) : (
-            <View style={styles.groupsWrap}>
-              {gruposPorCategoria.map((grupo) => (
-                <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
-                  <View style={styles.grupoHeader}>
-                    <CategoryIcon nome={grupo.nome} size={16} />
-                    <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
-                      {grupo.nome.toUpperCase()}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.list}>
-                    {grupo.exercicios.map((item) => {
-                      const linked = treino.exercicioIds.includes(item._id);
-                      return (
-                        <Pressable key={item._id} onPress={() => handleToggleExercicio(item._id)}>
-                          <Card style={[styles.exercicioRow, linked && { borderColor: Brand.primary, borderWidth: 1}]}>
-                            <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} size={30} />
-                            <View style={{ flex: 1 }}>
-                              <ThemedText type="smallBold">{item.nome}</ThemedText>
-                            </View>
-                            <View
-                              style={[
-                                styles.checkCircle,
-                                { borderColor: linked ? Brand.primary : theme.border },
-                                linked && { backgroundColor: Brand.primary },
-                              ]}>
-                              {linked && <Ionicons name="checkmark" size={14} color="#fff" />}
-                            </View>
-                          </Card>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+        <SectionList
+          ref={sectionListRef}
+          sections={sections}
+          keyExtractor={(item) => item._id}
+          stickySectionHeadersEnabled
+          initialNumToRender={100}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <>
+              <Card style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <LabeledTextField label="Nome do treino" value={nome} onChangeText={setNome} maxLength={50} />
                 </View>
-              ))}
+                <GradientButton title="Salvar" onPress={handleSaveNome} loading={savingNome} disabled={!nome.trim()} />
+              </Card>
+
+              <ThemedText type="smallBold">Exercícios</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Toque para vincular ou desvincular deste treino.
+              </ThemedText>
+            </>
+          }
+          ListHeaderComponentStyle={styles.listHeader}
+          ListEmptyComponent={
+            <EmptyState icon="barbell-outline" title="Nenhum exercício cadastrado ainda (crie na tab Exercícios)." />
+          }
+          renderSectionHeader={({ section }) => (
+            <View
+              ref={(el) => {
+                headerRefs.current[section.categoriaId] = el;
+              }}
+              style={[styles.grupoHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+              <CategoryIcon nome={section.nome} size={18} />
+              <ThemedText type="smallBold" style={styles.grupoTitle}>
+                {section.nome.toUpperCase()}
+              </ThemedText>
             </View>
           )}
-
-          <View style={styles.secondaryRow}>
-            <Pressable onPress={handleCloneTreino} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
-              <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
-              <ThemedText type="small" themeColor="textSecondary">
-                Clonar
-              </ThemedText>
-            </Pressable>
-            <Pressable onPress={handleDeleteTreino} hitSlop={8} style={styles.secondaryButton}>
-              <Ionicons name="trash-outline" size={16} color="#e53935" />
-              <ThemedText type="small" style={styles.dangerText}>
-                Excluir treino
-              </ThemedText>
-            </Pressable>
-          </View>
-        </ScrollView>
+          renderItem={({ item, index, section }) => {
+            const linked = treino.exercicioIds.includes(item._id);
+            const isLastInSection = index === section.data.length - 1;
+            return (
+              <Pressable
+                onPress={() => handleToggleExercicio(item._id)}
+                style={[styles.itemWrap, isLastInSection && styles.itemWrapLastInSection]}>
+                <Card style={[styles.exercicioRow, linked && { borderColor: Brand.primary, borderWidth: 1 }]}>
+                  <ExercicioThumbnail exercicio={item} categoriaNome={section.nome} size={30} />
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="smallBold">{item.nome}</ThemedText>
+                  </View>
+                  <View
+                    style={[
+                      styles.checkCircle,
+                      { borderColor: linked ? Brand.primary : theme.border },
+                      linked && { backgroundColor: Brand.primary },
+                    ]}>
+                    {linked && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </View>
+                </Card>
+              </Pressable>
+            );
+          }}
+          ListFooterComponent={
+            <View style={styles.secondaryRow}>
+              <Pressable onPress={handleCloneTreino} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
+                <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+                <ThemedText type="small" themeColor="textSecondary">
+                  Clonar
+                </ThemedText>
+              </Pressable>
+              <Pressable onPress={handleDeleteTreino} hitSlop={8} style={styles.secondaryButton}>
+                <Ionicons name="trash-outline" size={16} color="#e53935" />
+                <ThemedText type="small" style={styles.dangerText}>
+                  Excluir treino
+                </ThemedText>
+              </Pressable>
+            </View>
+          }
+        />
       </SafeAreaView>
     </ThemedView>
   );
@@ -227,13 +265,20 @@ export default function TreinoEditorScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
-  scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
+  scrollContent: { paddingBottom: Spacing.five },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two },
-  groupsWrap: { gap: Spacing.four },
-  grupo: { gap: Spacing.two },
-  grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
-  grupoTitle: { letterSpacing: 0.5 },
-  list: { gap: Spacing.two },
+  listHeader: { gap: Spacing.three, marginBottom: Spacing.three },
+  grupoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingLeft: Spacing.one,
+    paddingVertical: Spacing.two,
+    borderBottomWidth: 1,
+  },
+  grupoTitle: { fontSize: 16, letterSpacing: 0.6, color: Brand.primary },
+  itemWrap: { marginTop: Spacing.two },
+  itemWrapLastInSection: { marginBottom: Spacing.four },
   exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   checkCircle: {
     width: 24,
@@ -247,7 +292,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: Spacing.five,
-    marginTop: Spacing.two,
+    marginTop: Spacing.four,
   },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   dangerText: { color: '#e53935' },

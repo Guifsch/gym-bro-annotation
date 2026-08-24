@@ -12,10 +12,11 @@ import {
   hashUserPassword,
   signAccessToken,
   signRefreshToken,
+  verifyAccessToken,
   verifyRefreshToken,
 } from '../utils/auth';
 import { asyncHandler } from '../utils/asyncHandler';
-import { clearAuthCookies, getRefreshTokenCookieName, setAuthCookies } from '../utils/cookies';
+import { clearAuthCookies, getAccessTokenCookieName, getRefreshTokenCookieName, setAuthCookies } from '../utils/cookies';
 import { sendPasswordResetCode, sendRegistrationCode } from '../utils/email';
 import {
   changePasswordSchema,
@@ -98,7 +99,7 @@ router.post(
 
     const claims = publicUser(user);
     const accessToken = signAccessToken(claims);
-    const refreshToken = signRefreshToken(claims);
+    const refreshToken = signRefreshToken(claims, user.tokenVersion);
     setAuthCookies(res, { accessToken, refreshToken });
 
     res.status(201).json({ user: claims, accessToken, refreshToken });
@@ -119,7 +120,7 @@ router.post(
 
     const claims = publicUser(user);
     const accessToken = signAccessToken(claims);
-    const refreshToken = signRefreshToken(claims);
+    const refreshToken = signRefreshToken(claims, user.tokenVersion);
     setAuthCookies(res, { accessToken, refreshToken });
 
     res.status(200).json({ user: claims, accessToken, refreshToken });
@@ -146,7 +147,10 @@ router.post(
     }
 
     const user = await User.findById(claims.id);
-    if (!user) {
+    // Refresh tokens issued before this check existed carry no tokenVersion claim at all —
+    // treat that as version 0 (the schema default) so already-logged-in sessions survive the
+    // deploy instead of everyone being forced to log back in at once.
+    if (!user || user.tokenVersion !== (claims.tokenVersion ?? 0)) {
       res.status(401).json({ error: 'Refresh token inválido ou expirado' });
       return;
     }
@@ -212,6 +216,7 @@ router.post(
     }
 
     user.passwordHash = await hashUserPassword(password);
+    user.tokenVersion += 1;
     await user.save();
 
     record.usedAt = new Date();
@@ -273,15 +278,48 @@ router.post(
     }
 
     user.passwordHash = await hashUserPassword(newPassword);
+    user.tokenVersion += 1;
     await user.save();
 
     res.status(200).json({ message: 'Senha atualizada.' });
   })
 );
 
-router.post('/logout', (_req, res) => {
-  clearAuthCookies(res);
-  res.status(200).json({ message: 'ok' });
-});
+router.post(
+  '/logout',
+  asyncHandler(async (req, res) => {
+    // Best-effort revocation: cookies are always cleared regardless of whether we can identify
+    // who's logging out (an expired/missing token here shouldn't turn "log out" into an error).
+    // Tries the access token first (Bearer header for mobile, cookie for web), then falls back
+    // to the refresh token (cookie or body) — covers every shape either client actually sends.
+    const header = req.headers.authorization;
+    const bearerToken = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
+    const accessToken = bearerToken ?? req.cookies?.[getAccessTokenCookieName()] ?? null;
+    const refreshToken = req.body?.refreshToken ?? req.cookies?.[getRefreshTokenCookieName()] ?? null;
+
+    let userId: string | null = null;
+    if (accessToken) {
+      try {
+        userId = verifyAccessToken(accessToken).id;
+      } catch {
+        // expired/invalid — fall through to the refresh token below
+      }
+    }
+    if (!userId && refreshToken) {
+      try {
+        userId = verifyRefreshToken(refreshToken).id;
+      } catch {
+        // nothing usable to identify the session — clear cookies and move on
+      }
+    }
+
+    if (userId) {
+      await User.updateOne({ _id: userId }, { $inc: { tokenVersion: 1 } });
+    }
+
+    clearAuthCookies(res);
+    res.status(200).json({ message: 'ok' });
+  })
+);
 
 export default router;

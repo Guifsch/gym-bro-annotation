@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Alert, BackHandler, Pressable, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
@@ -39,8 +39,13 @@ import { showToast } from '@/components/toast';
 import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useCategoryScroll } from '@/hooks/useCategoryScroll';
 import type { Categoria, Exercicio, LogFields } from '@/types/workout';
+
+interface CategoriaSection {
+  categoriaId: string;
+  nome: string;
+  data: Exercicio[];
+}
 
 export default function ExerciciosListaScreen() {
   const theme = useTheme();
@@ -125,7 +130,9 @@ export default function ExerciciosListaScreen() {
     return map;
   }, [exercicios]);
 
-  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
+  const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
+  const headerRefs = useRef<Record<string, View | null>>({});
+  const formScrollViewRef = useRef<ScrollView>(null);
 
   const gruposPorCategoria = useMemo(() => {
     const map = new Map<string, Exercicio[]>();
@@ -142,6 +149,26 @@ export default function ExerciciosListaScreen() {
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [exercicios, categoriaNomeById]);
+
+  const sections = useMemo<CategoriaSection[]>(
+    () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
+    [gruposPorCategoria]
+  );
+
+  // Same fix as the calendar's sessão screen: `scrollToLocation` throws when the target section
+  // hasn't been measured yet (silent in release builds, so the jump bar just did nothing) —
+  // measure the header directly instead, via the SectionList's underlying native scroll node.
+  function scrollToCategory(categoriaId: string) {
+    const node = headerRefs.current[categoriaId];
+    const scrollResponder = sectionListRef.current?.getScrollResponder();
+    const nativeScrollRef = scrollResponder?.getNativeScrollRef();
+    if (!node || !scrollResponder || !nativeScrollRef) return;
+    node.measureLayout(
+      nativeScrollRef,
+      (_x, y) => scrollResponder.scrollTo({ y: Math.max(0, y - 8), animated: true }),
+      () => {}
+    );
+  }
 
   async function handleUploadImagem(uri: string, contentType: string) {
     if (!editingId) {
@@ -263,7 +290,7 @@ export default function ExerciciosListaScreen() {
     const target = exercicios.find((e) => e._id === id);
     if (!target) return;
     startEditing(target);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    formScrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }
 
   async function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
@@ -392,19 +419,15 @@ export default function ExerciciosListaScreen() {
         {!creating && !editingId && gruposPorCategoria.length > 0 && (
           <CategoryJumpBar
             categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
-            onSelect={scrollToGroup}
+            onSelect={scrollToCategory}
           />
         )}
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {!creating && !editingId ? (
-            <GradientButton
-              title="Criar exercício"
-              icon={<Ionicons name="add-circle-outline" size={20} color="#fff" />}
-              onPress={() => setCreating(true)}
-            />
-          ) : (
-          <>
+        {creating || editingId ? (
+          <ScrollView
+            ref={formScrollViewRef}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}>
           {(creating || editingExercicio) && (
             <ExercicioCoverPhoto
               capa={editingExercicio?.capa ?? (stagedCapa ? { url: stagedCapa.uri, key: 'staged-capa' } : undefined)}
@@ -558,76 +581,92 @@ export default function ExerciciosListaScreen() {
               </View>
             </View>
           </Card>
-          </>
-          )}
-
-          {!creating && !editingId && (
-            <>
-              {!loading && exercicios.length === 0 ? (
-                <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
-              ) : (
-                <>
-                  <View style={styles.groupsWrap}>
-                  {gruposPorCategoria.map((grupo) => (
-                    <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
-                      <View style={styles.grupoHeader}>
-                        <CategoryIcon nome={grupo.nome} size={16} />
-                        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
-                          {grupo.nome.toUpperCase()}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.list}>
-                        {grupo.exercicios.map((item) => (
-                          <SwipeableRow key={item._id} onDelete={() => handleDelete(item)}>
-                            <View style={styles.itemWrap}>
-                              <Pressable onPress={() => startEditing(item)}>
-                                <Card style={styles.itemRow}>
-                                  <ExercicioThumbnail exercicio={item} categoriaNome={grupo.nome} size={32} />
-                                  <View style={{ flex: 1 }}>
-                                    <ThemedText type="smallBold">{item.nome}</ThemedText>
-                                    <ThemedText type="small" themeColor="textSecondary">
-                                      {item.sets}x{item.reps} · {item.pesoKg}kg
-                                    </ThemedText>
-                                    {substitutosDisplayById[item._id] && (
-                                      <View style={styles.substitutoList}>
-                                        {substitutosDisplayById[item._id].map((s) => (
-                                          <Pressable
-                                            key={s.id}
-                                            onPress={() => handleGoToSubstituto(s.id)}
-                                            style={styles.substitutoRow}>
-                                            <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
-                                            <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
-                                              {s.nome}
-                                            </ThemedText>
-                                          </Pressable>
-                                        ))}
-                                      </View>
-                                    )}
-                                  </View>
-                                  <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                                    <Ionicons name="trash-outline" size={18} color="#e53935" />
-                                  </Pressable>
-                                </Card>
-                              </Pressable>
-                              <InlineLogEditor
-                                key={`${item._id}-${item.sets}-${item.reps}-${item.pesoKg}`}
-                                sets={item.sets}
-                                reps={item.reps}
-                                pesoKg={item.pesoKg}
-                                onSaveFields={(fields) => handleQuickUpdate(item, fields)}
-                              />
+          </ScrollView>
+        ) : !loading && exercicios.length === 0 ? (
+          <View style={styles.scrollContent}>
+            <GradientButton
+              title="Criar exercício"
+              icon={<Ionicons name="add-circle-outline" size={20} color="#fff" />}
+              onPress={() => setCreating(true)}
+            />
+            <EmptyState icon="barbell-outline" title="Nenhum exercício ainda." />
+          </View>
+        ) : (
+          <SectionList
+            ref={sectionListRef}
+            sections={sections}
+            keyExtractor={(item) => item._id}
+            stickySectionHeadersEnabled
+            initialNumToRender={100}
+            contentContainerStyle={styles.sectionContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <GradientButton
+                title="Criar exercício"
+                icon={<Ionicons name="add-circle-outline" size={20} color="#fff" />}
+                onPress={() => setCreating(true)}
+              />
+            }
+            ListHeaderComponentStyle={styles.createButtonHeader}
+            renderSectionHeader={({ section }) => (
+              <View
+                ref={(el) => {
+                  headerRefs.current[section.categoriaId] = el;
+                }}
+                style={[styles.grupoHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+                <CategoryIcon nome={section.nome} size={18} />
+                <ThemedText type="smallBold" style={styles.grupoTitle}>
+                  {section.nome.toUpperCase()}
+                </ThemedText>
+              </View>
+            )}
+            renderItem={({ item, index, section }) => {
+              const isLastInSection = index === section.data.length - 1;
+              return (
+                <SwipeableRow onDelete={() => handleDelete(item)}>
+                  <View style={[styles.itemWrap, isLastInSection && styles.itemWrapLastInSection]}>
+                    <Pressable onPress={() => startEditing(item)}>
+                      <Card style={styles.itemRow}>
+                        <ExercicioThumbnail exercicio={item} categoriaNome={section.nome} size={32} />
+                        <View style={{ flex: 1 }}>
+                          <ThemedText type="smallBold">{item.nome}</ThemedText>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {item.sets}x{item.reps} · {item.pesoKg}kg
+                          </ThemedText>
+                          {substitutosDisplayById[item._id] && (
+                            <View style={styles.substitutoList}>
+                              {substitutosDisplayById[item._id].map((s) => (
+                                <Pressable
+                                  key={s.id}
+                                  onPress={() => handleGoToSubstituto(s.id)}
+                                  style={styles.substitutoRow}>
+                                  <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
+                                  <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
+                                    {s.nome}
+                                  </ThemedText>
+                                </Pressable>
+                              ))}
                             </View>
-                          </SwipeableRow>
-                        ))}
-                      </View>
-                    </View>
-                  ))}
+                          )}
+                        </View>
+                        <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                          <Ionicons name="trash-outline" size={18} color="#e53935" />
+                        </Pressable>
+                      </Card>
+                    </Pressable>
+                    <InlineLogEditor
+                      key={`${item._id}-${item.sets}-${item.reps}-${item.pesoKg}`}
+                      sets={item.sets}
+                      reps={item.reps}
+                      pesoKg={item.pesoKg}
+                      onSaveFields={(fields) => handleQuickUpdate(item, fields)}
+                    />
                   </View>
-                </>
-              )}
-            </>
-          )}
-        </ScrollView>
+                </SwipeableRow>
+              );
+            }}
+          />
+        )}
       </SafeAreaView>
 
       <ExercicioHistoricoModal
@@ -654,15 +693,22 @@ const styles = StyleSheet.create({
   actionsColumn: { gap: Spacing.two, marginTop: Spacing.one },
   secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.five },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
-  list: { gap: Spacing.one },
-  itemWrap: { gap: 2 },
+  sectionContent: { paddingBottom: Spacing.five },
+  createButtonHeader: { marginBottom: Spacing.three },
+  itemWrap: { gap: 2, marginTop: Spacing.one },
+  itemWrapLastInSection: { marginBottom: Spacing.three },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
   substitutoList: { gap: 2, marginTop: 2 },
   substitutoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   substitutoText: { color: Brand.primary, textDecorationLine: 'underline' },
   deleteButton: { padding: Spacing.one },
-  groupsWrap: { gap: Spacing.three },
-  grupo: { gap: Spacing.one },
-  grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
-  grupoTitle: { letterSpacing: 0.5 },
+  grupoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingLeft: Spacing.one,
+    paddingVertical: Spacing.two,
+    borderBottomWidth: 1,
+  },
+  grupoTitle: { fontSize: 16, letterSpacing: 0.6, color: Brand.primary },
 });

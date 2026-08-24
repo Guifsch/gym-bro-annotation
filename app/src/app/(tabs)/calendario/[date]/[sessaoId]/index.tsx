@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { type UpsertEntryParams, getSessao, getTreino, listCategorias, listExercicios } from '@/api/workoutApi';
@@ -16,13 +16,20 @@ import { LoadingView } from '@/components/loading-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
-import { useCategoryScroll } from '@/hooks/useCategoryScroll';
+import { useTheme } from '@/hooks/use-theme';
 import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
 import { enqueueUpsertSessaoEntry } from '@/offline/queue';
 import type { Categoria, Exercicio, LogFields, Sessao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
 
+interface CategoriaSection {
+  categoriaId: string;
+  nome: string;
+  data: Exercicio[];
+}
+
 export default function SessaoDetalheScreen() {
+  const theme = useTheme();
   const { date, sessaoId } = useLocalSearchParams<{ date: string; sessaoId: string }>();
 
   const [sessao, setSessao] = useState<Sessao | null>(null);
@@ -84,7 +91,8 @@ export default function SessaoDetalheScreen() {
     router.push(`/(tabs)/calendario/${date}/${sessaoId}/${id}`);
   }
 
-  const { scrollViewRef, setGroupRef, scrollToGroup } = useCategoryScroll();
+  const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
+  const headerRefs = useRef<Record<string, View | null>>({});
 
   const gruposPorCategoria = useMemo(() => {
     if (!treino) return [];
@@ -102,6 +110,28 @@ export default function SessaoDetalheScreen() {
       exercicios: exerciciosDaCategoria,
     }));
   }, [treino, exercicioById, categoriaNomeById]);
+
+  const sections = useMemo<CategoriaSection[]>(
+    () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
+    [gruposPorCategoria]
+  );
+
+  // `scrollToLocation` alone throws ("scrollToIndex should be used in conjunction with
+  // getItemLayout or onScrollToIndexFailed") whenever the target section hasn't been measured
+  // yet — silent in a release build (no redbox), so tapping the jump bar just did nothing. Measure
+  // the header directly instead: `measureLayout` against the SectionList's underlying native
+  // scroll node (same fix applied in exercicios/lista.tsx and treinos/[treinoId].tsx).
+  function scrollToCategory(categoriaId: string) {
+    const node = headerRefs.current[categoriaId];
+    const scrollResponder = sectionListRef.current?.getScrollResponder();
+    const nativeScrollRef = scrollResponder?.getNativeScrollRef();
+    if (!node || !scrollResponder || !nativeScrollRef) return;
+    node.measureLayout(
+      nativeScrollRef,
+      (_x, y) => scrollResponder.scrollTo({ y: Math.max(0, y - 8), animated: true }),
+      () => {}
+    );
+  }
 
   function handleSaveFields(exercicio: Exercicio, fields: LogFields) {
     if (!sessao || Object.keys(fields).length === 0) return;
@@ -150,66 +180,76 @@ export default function SessaoDetalheScreen() {
           <>
             <CategoryJumpBar
               categorias={gruposPorCategoria.map((g) => ({ categoriaId: g.categoriaId, nome: g.nome }))}
-              onSelect={scrollToGroup}
+              onSelect={scrollToCategory}
             />
-            <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {gruposPorCategoria.map((grupo) => (
-              <View key={grupo.categoriaId} ref={setGroupRef(grupo.categoriaId)} style={styles.grupo}>
-                <View style={styles.grupoHeader}>
-                  <CategoryIcon nome={grupo.nome} size={16} />
-                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.grupoTitle}>
-                    {grupo.nome.toUpperCase()}
+            <SectionList
+              ref={sectionListRef}
+              sections={sections}
+              keyExtractor={(item) => item._id}
+              stickySectionHeadersEnabled
+              initialNumToRender={100}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              renderSectionHeader={({ section }) => (
+                <View
+                  ref={(el) => {
+                    headerRefs.current[section.categoriaId] = el;
+                  }}
+                  style={[
+                    styles.grupoHeader,
+                    { backgroundColor: theme.background, borderBottomColor: theme.border },
+                  ]}>
+                  <CategoryIcon nome={section.nome} size={18} />
+                  <ThemedText type="smallBold" style={styles.grupoTitle}>
+                    {section.nome.toUpperCase()}
                   </ThemedText>
                 </View>
-                <View style={styles.exerciciosList}>
-                  {grupo.exercicios.map((exercicio) => {
-                    const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
-                    const sets = entry?.sets ?? exercicio.sets;
-                    const reps = entry?.reps ?? exercicio.reps;
-                    const pesoKg = entry?.pesoKg ?? exercicio.pesoKg;
-                    return (
-                      <View key={exercicio._id} style={styles.exercicioWrap}>
-                        <Pressable
-                          onPress={() => router.push(`/(tabs)/calendario/${date}/${sessaoId}/${exercicio._id}`)}>
-                          <Card style={styles.exercicioRow}>
-                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={grupo.nome} size={30} />
-                            <View style={styles.exercicioText}>
-                              <ThemedText type="smallBold">{exercicio.nome}</ThemedText>
-                              <ThemedText type="small" themeColor="textSecondary">
-                                {sets}x{reps} · {pesoKg}kg
-                              </ThemedText>
-                              {substitutosDisplayById[exercicio._id] && (
-                                <View style={styles.substitutoList}>
-                                  {substitutosDisplayById[exercicio._id].map((s) => (
-                                    <Pressable
-                                      key={s.id}
-                                      onPress={() => handleGoToSubstituto(s.id)}
-                                      style={styles.substitutoRow}>
-                                      <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
-                                      <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
-                                        {s.nome}
-                                      </ThemedText>
-                                    </Pressable>
-                                  ))}
-                                </View>
-                              )}
+              )}
+              renderItem={({ item: exercicio, index, section }) => {
+                const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
+                const sets = entry?.sets ?? exercicio.sets;
+                const reps = entry?.reps ?? exercicio.reps;
+                const pesoKg = entry?.pesoKg ?? exercicio.pesoKg;
+                const isLastInSection = index === section.data.length - 1;
+                return (
+                  <View style={[styles.exercicioWrap, isLastInSection && styles.exercicioWrapLastInSection]}>
+                    <Pressable onPress={() => router.push(`/(tabs)/calendario/${date}/${sessaoId}/${exercicio._id}`)}>
+                      <Card style={styles.exercicioRow}>
+                        <ExercicioThumbnail exercicio={exercicio} categoriaNome={section.nome} size={30} />
+                        <View style={styles.exercicioText}>
+                          <ThemedText type="smallBold">{exercicio.nome}</ThemedText>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {sets}x{reps} · {pesoKg}kg
+                          </ThemedText>
+                          {substitutosDisplayById[exercicio._id] && (
+                            <View style={styles.substitutoList}>
+                              {substitutosDisplayById[exercicio._id].map((s) => (
+                                <Pressable
+                                  key={s.id}
+                                  onPress={() => handleGoToSubstituto(s.id)}
+                                  style={styles.substitutoRow}>
+                                  <Ionicons name="swap-horizontal-outline" size={12} color={Brand.primary} />
+                                  <ThemedText type="small" style={styles.substitutoText} numberOfLines={1}>
+                                    {s.nome}
+                                  </ThemedText>
+                                </Pressable>
+                              ))}
                             </View>
-                          </Card>
-                        </Pressable>
-                        <InlineLogEditor
-                          key={`${exercicio._id}-${sets}-${reps}-${pesoKg}`}
-                          sets={sets}
-                          reps={reps}
-                          pesoKg={pesoKg}
-                          onSaveFields={(fields) => handleSaveFields(exercicio, fields)}
-                        />
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-            </ScrollView>
+                          )}
+                        </View>
+                      </Card>
+                    </Pressable>
+                    <InlineLogEditor
+                      key={`${exercicio._id}-${sets}-${reps}-${pesoKg}`}
+                      sets={sets}
+                      reps={reps}
+                      pesoKg={pesoKg}
+                      onSaveFields={(fields) => handleSaveFields(exercicio, fields)}
+                    />
+                  </View>
+                );
+              }}
+            />
           </>
         )}
       </SafeAreaView>
@@ -220,12 +260,18 @@ export default function SessaoDetalheScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
-  scrollContent: { paddingBottom: Spacing.five, gap: Spacing.three },
-  grupo: { gap: Spacing.one },
-  grupoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingLeft: Spacing.one },
-  grupoTitle: { letterSpacing: 0.5 },
-  exerciciosList: { gap: Spacing.one },
-  exercicioWrap: { gap: 2 },
+  scrollContent: { paddingBottom: Spacing.five },
+  grupoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingLeft: Spacing.one,
+    paddingVertical: Spacing.two,
+    borderBottomWidth: 1,
+  },
+  grupoTitle: { fontSize: 16, letterSpacing: 0.6, color: Brand.primary },
+  exercicioWrap: { gap: 2, marginTop: Spacing.one },
+  exercicioWrapLastInSection: { marginBottom: Spacing.three },
   exercicioRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
   exercicioText: { flex: 1, gap: 2 },
   substitutoList: { gap: 2, marginTop: 2 },
