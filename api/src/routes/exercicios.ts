@@ -194,9 +194,21 @@ router.patch(
     const setOps: Record<string, unknown> = { ...restBody };
     if (resolved.value !== undefined) setOps.substitutoIds = resolved.value;
 
+    // Histórico only tracks sets/reps/pesoKg changes — editing nome/descrição/categoria/etc.
+    // alone (or resaving the same numbers) shouldn't push a redundant snapshot.
+    const setsRepsPesoChanged =
+      (body.sets !== undefined && body.sets !== existing.sets) ||
+      (body.reps !== undefined && body.reps !== existing.reps) ||
+      (body.pesoKg !== undefined && body.pesoKg !== existing.pesoKg);
+
+    const updateOps: Record<string, unknown> = { $set: setOps };
+    if (setsRepsPesoChanged) {
+      updateOps.$push = { historico: { $each: [snapshot], $slice: -50 } };
+    }
+
     const exercicio = await Exercicio.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.id },
-      { $set: setOps, $push: { historico: { $each: [snapshot], $slice: -50 } } },
+      updateOps,
       { new: true }
     ).select('-historico');
     if (!exercicio) {
