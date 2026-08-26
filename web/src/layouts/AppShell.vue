@@ -16,6 +16,7 @@ const navItems = [
   { title: 'Exercícios', icon: 'mdi-dumbbell', to: '/exercicios' },
   { title: 'Treinos', icon: 'mdi-clipboard-list-outline', to: '/treinos' },
   { title: 'Alimentação', icon: 'mdi-food-apple-outline', to: '/alimentacao' },
+  { title: 'Avaliação Física', icon: 'mdi-clipboard-pulse-outline', to: '/avaliacao-fisica' },
   { title: 'Relatórios', icon: 'mdi-chart-bar', to: '/relatorios' },
 ]
 

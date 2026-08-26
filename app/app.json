@@ -15,14 +15,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.app",
-      "permissions": [
-        "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM",
-        "WAKE_LOCK",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
-      ]
+      "package": "com.anonymous.app"
     },
     "web": {
       "output": "static",
@@ -45,11 +38,7 @@
           "cameraPermission": "Permita o acesso à câmera para fotografar o equipamento do exercício.",
           "photosPermission": "Permita o acesso às fotos para anexar uma imagem ao exercício."
         }
-      ],
-      "./plugins/withNotifeeMavenRepo.js",
-      "./plugins/withNotifeeForegroundService.js",
-      "./plugins/withNotificationIcon.js",
-      "./plugins/withNotifeeProguardRules.js"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

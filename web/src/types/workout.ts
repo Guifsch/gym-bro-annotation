@@ -84,3 +84,33 @@ export interface AttendanceSummary {
   total: number
   perMonth: number[]
 }
+
+export interface BodyMetricMedidas {
+  cintura?: number
+  quadril?: number
+  peito?: number
+  pescoco?: number
+  bracoEsquerdo?: number
+  bracoDireito?: number
+  coxaEsquerda?: number
+  coxaDireita?: number
+}
+
+export interface BodyMetricEntry {
+  _id: string
+  date: string
+  pesoKg?: number
+  medidas?: BodyMetricMedidas
+  observacoes?: string
+}
+
+export interface BodyGoal {
+  _id: string
+  nome?: string
+  pesoMetaKg: number
+  createdAt: string
+}
+
+export interface BodyGoalSummary extends BodyGoal {
+  latestPesoKg: number | null
+}

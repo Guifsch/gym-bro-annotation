@@ -8,6 +8,8 @@ const props = defineProps<{
   refeicaoDates?: Set<string>
   attendanceDates?: Set<string>
   selectedDates?: Set<string>
+  registroDates?: Set<string>
+  activeDate?: string
   compact?: boolean
 }>()
 
@@ -85,15 +87,20 @@ function dayNumber(date: string): number {
             'month-calendar__day--empty': !date,
             'month-calendar__day--today': date === todayStr,
             'month-calendar__day--selected': date && selectedDates?.has(date),
+            'month-calendar__day--active': date && date === activeDate && date !== todayStr,
           }"
           :disabled="!date"
           @click="date && emit('dayClick', date)"
         >
           <span v-if="date">{{ dayNumber(date) }}</span>
           <span v-if="date && attendanceDates?.has(date)" class="month-calendar__ring" />
-          <div v-if="date && (markedDates?.has(date) || refeicaoDates?.has(date))" class="month-calendar__dots">
+          <div
+            v-if="date && (markedDates?.has(date) || refeicaoDates?.has(date) || registroDates?.has(date))"
+            class="month-calendar__dots"
+          >
             <span v-if="markedDates?.has(date)" class="month-calendar__dot month-calendar__dot--treino" />
             <span v-if="refeicaoDates?.has(date)" class="month-calendar__dot month-calendar__dot--refeicao" />
+            <span v-if="registroDates?.has(date)" class="month-calendar__dot month-calendar__dot--registro" />
           </div>
         </button>
       </template>
@@ -171,6 +178,10 @@ function dayNumber(date: string): number {
   outline: 2px solid rgb(var(--v-theme-primary));
 }
 
+.month-calendar__day--active {
+  outline: 2px solid rgb(255 114 0);
+}
+
 .month-calendar__dots {
   position: absolute;
   bottom: 6px;
@@ -190,6 +201,10 @@ function dayNumber(date: string): number {
 
 .month-calendar__dot--refeicao {
   background: rgb(255 114 0);
+}
+
+.month-calendar__dot--registro {
+  background: rgb(244 67 54);
 }
 
 .month-calendar--compact .month-calendar__dots {

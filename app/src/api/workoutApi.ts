@@ -2,13 +2,16 @@ import { File } from 'expo-file-system';
 
 import { getAccessToken } from '@/auth/tokenMemory';
 import type {
+  BodyGoal,
+  BodyGoalSummary,
+  BodyMetricEntry,
+  BodyMetricMedidas,
   Categoria,
   DiaTreino,
   Exercicio,
   ExercicioHistoricoEntry,
   Refeicao,
   Sessao,
-  TimerPreset,
   Treino,
 } from '@/types/workout';
 
@@ -279,16 +282,66 @@ export async function deleteRefeicao(id: string): Promise<void> {
   await apiClient.delete(`/api/refeicoes/${id}`);
 }
 
-export async function listTimerPresets(): Promise<TimerPreset[]> {
-  const { data } = await apiClient.get('/api/timer-presets');
-  return data.presets;
+export interface UpsertBodyMetricEntryParams {
+  pesoKg?: number | null;
+  medidas?: BodyMetricMedidas | null;
+  observacoes?: string | null;
 }
 
-export async function createTimerPreset(params: { id: string; seconds: number }): Promise<TimerPreset> {
-  const { data } = await apiClient.post('/api/timer-presets', params);
-  return data.preset;
+export async function listBodyMetricEntries(goalId: string): Promise<BodyMetricEntry[]> {
+  const { data } = await apiClient.get(`/api/body-goals/${goalId}/entries`);
+  return data.entries;
 }
 
-export async function deleteTimerPreset(id: string): Promise<void> {
-  await apiClient.delete(`/api/timer-presets/${id}`);
+export async function getBodyMetricEntry(goalId: string, date: string): Promise<BodyMetricEntry | null> {
+  const { data } = await apiClient.get(`/api/body-goals/${goalId}/entries/${date}`);
+  return data.entry;
+}
+
+export async function upsertBodyMetricEntry(
+  goalId: string,
+  date: string,
+  params: UpsertBodyMetricEntryParams
+): Promise<BodyMetricEntry> {
+  const { data } = await apiClient.put(`/api/body-goals/${goalId}/entries/${date}`, params);
+  return data.entry;
+}
+
+export async function deleteBodyMetricEntry(goalId: string, date: string): Promise<void> {
+  await apiClient.delete(`/api/body-goals/${goalId}/entries/${date}`);
+}
+
+export interface CreateBodyGoalParams {
+  id: string;
+  nome?: string;
+  pesoMetaKg: number;
+}
+
+export interface UpdateBodyGoalParams {
+  nome?: string | null;
+  pesoMetaKg?: number;
+}
+
+export async function listBodyGoals(): Promise<BodyGoalSummary[]> {
+  const { data } = await apiClient.get('/api/body-goals');
+  return data.goals;
+}
+
+export async function createBodyGoal(params: CreateBodyGoalParams): Promise<BodyGoal> {
+  const { data } = await apiClient.post('/api/body-goals', params);
+  return data.goal;
+}
+
+export async function getBodyGoal(id: string): Promise<BodyGoal> {
+  const { data } = await apiClient.get(`/api/body-goals/${id}`);
+  return data.goal;
+}
+
+export async function updateBodyGoal(id: string, params: UpdateBodyGoalParams): Promise<BodyGoal> {
+  const { data } = await apiClient.patch(`/api/body-goals/${id}`, params);
+  return data.goal;
+}
+
+export async function deleteBodyGoal(id: string): Promise<void> {
+  await apiClient.delete(`/api/body-goals/${id}`);
 }

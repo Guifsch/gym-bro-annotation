@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,10 +16,18 @@ interface MonthCalendarProps {
   /** 'dot' (default) is a subtle indicator (e.g. "has a session logged"); 'fill' is a much more
    * visible solid circle, meant for contexts where marked = actively selected (e.g. a date picker). */
   markedStyle?: 'dot' | 'fill';
+  /** Color of the 'fill' circle — defaults to the brand green (existing callers keep their look).
+   * A single-date picker that also uses the brand green for "today" wants a visually distinct
+   * color for "selected" instead, so it isn't confused with today's own highlight. */
+  markedColor?: string;
   /** Days the "fui na academia" checkbox was marked for — rendered as a ring around the day circle
    * instead of competing for the same dot/fill as `markedDates`, so both can show at once (a day
    * can have a session logged AND be marked as attended, or just one of the two). */
   attendanceDates?: Set<string>;
+  /** Days that already have some other kind of record (e.g. a body-metric entry) — a small red dot
+   * below the day number, independent of `markedDates`/`attendanceDates` so it can show alongside
+   * "today" or "selected" on the same day. */
+  dataDates?: Set<string>;
 }
 
 const WEEKDAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -56,7 +63,9 @@ export function MonthCalendar({
   onPrevMonth,
   onNextMonth,
   markedStyle = 'dot',
+  markedColor = Brand.primary,
   attendanceDates,
+  dataDates,
 }: MonthCalendarProps) {
   const theme = useTheme();
   const todayStr = getTodayDateString();
@@ -104,26 +113,32 @@ export function MonthCalendar({
             const isToday = cell.date === todayStr;
             const isMarked = markedDates.has(cell.date);
             const hasAttendance = attendanceDates?.has(cell.date) ?? false;
+            const hasData = dataDates?.has(cell.date) ?? false;
             const ringStyle = hasAttendance ? styles.attendanceRing : undefined;
+            const dataDot = hasData && <View style={styles.dataDot} />;
 
             return (
               <Pressable key={cellIndex} onPress={() => onSelectDate(cell.date)} style={styles.cell}>
                 {isToday ? (
-                  <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={[styles.dayCircle, ringStyle]}>
+                  <View style={[styles.dayCircle, { backgroundColor: Brand.today }, ringStyle]}>
                     <ThemedText type="smallBold" style={styles.todayText}>
                       {cell.day}
                     </ThemedText>
-                  </LinearGradient>
+                    {isMarked && <View style={styles.dot} />}
+                    {dataDot}
+                  </View>
                 ) : isMarked && markedStyle === 'fill' ? (
-                  <View style={[styles.dayCircle, { backgroundColor: Brand.primary }, ringStyle]}>
+                  <View style={[styles.dayCircle, { backgroundColor: markedColor }, ringStyle]}>
                     <ThemedText type="smallBold" style={styles.todayText}>
                       {cell.day}
                     </ThemedText>
+                    {dataDot}
                   </View>
                 ) : (
                   <View style={[styles.dayCircle, ringStyle]}>
                     <ThemedText type="small">{cell.day}</ThemedText>
                     {isMarked && <View style={styles.dot} />}
+                    {dataDot}
                   </View>
                 )}
               </Pressable>
@@ -147,8 +162,16 @@ const styles = StyleSheet.create({
   },
   weekRow: { flexDirection: 'row' },
   cell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.one },
-  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  dayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   todayText: { color: '#fff' },
   dot: { position: 'absolute', bottom: 1, width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.primary },
+  dataDot: { position: 'absolute', bottom: 1, width: 5, height: 5, borderRadius: 3, backgroundColor: '#e53935' },
   attendanceRing: { borderWidth: 2, borderColor: Brand.accent },
 });

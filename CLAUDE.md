@@ -19,7 +19,7 @@
 3 tabs: **Calendário**, **Exercícios**, **Extras** (`(tabs)/_layout.tsx`). Nem toda funcionalidade é uma tab — landing pages dentro de uma tab (`TabHeader` + `LandingOption`) abrigam sub-seções que não precisam de aba própria:
 
 - **Exercícios** (`exercicios/index.tsx`): Categorias, Exercícios, **Treinos** (`exercicios/treinos/*` — não é mais tab própria, virou botão aqui; rotas `/(tabs)/exercicios/treinos[...]`).
-- **Extras** (`extras/index.tsx`): **Alimentação** (`extras/alimentacao/*`, rotas `/(tabs)/extras/alimentacao[...]`), **Timer** (`extras/timer.tsx` — UI completa do timer de descanso, ver seção própria) e **Relatórios** (`extras/relatorios.tsx` — estatísticas de presença, ver seção "Calendário") — pensado como "gaveta" pra seções que não são nem calendário/treino nem cadastro de exercício; qualquer feature nova desse tipo (não claramente "exercício" nem "calendário") entra aqui em vez de virar tab nova.
+- **Extras** (`extras/index.tsx`): **Alimentação** (`extras/alimentacao/*`, rotas `/(tabs)/extras/alimentacao[...]`), **Relatórios** (`extras/relatorios.tsx` — estatísticas de presença, ver seção "Calendário") e **Avaliação Física** (`extras/avaliacao-fisica/*` — lista de metas + `[goalId]`, ver seção própria) — pensado como "gaveta" pra seções que não são nem calendário/treino nem cadastro de exercício; qualquer feature nova desse tipo (não claramente "exercício" nem "calendário") entra aqui em vez de virar tab nova.
 
 **Histórico**: Treinos já foi tab própria; Alimentação já morou dentro de Exercícios. Movidos quando o app cresceu o suficiente pra 3 tabs ficarem sobrecarregadas — ao mover uma tela de lugar, sempre `grep` o projeto inteiro por `router.push`/`router.replace`/`Redirect` com o caminho antigo (inclusive os redirects pós-login em `app/index.tsx`, `(auth)/login.tsx`, `(auth)/register-code.tsx`, que apontavam pra tab default) e por menções textuais tipo "crie na tab X" em `EmptyState`/mensagens — fácil esquecer essas por não serem erro de tipo. **Sempre regenerar `.expo/types/router.d.ts`** depois de mover/renomear arquivo de rota (rodar `npx expo start` até o arquivo atualizar, depois parar) — `tsc --noEmit` falha com erros de rota "não existe" usando o manifest antigo, mesmo com os arquivos já movidos corretamente.
 
@@ -89,6 +89,43 @@ Opção na landing da tab Extras (`extras/index.tsx`) — leva pra `extras/alime
 
 ---
 
+## Avaliação Física — Metas (`BodyGoal`) + Registros (`BodyMetricEntry`) — Extras, só no app (não tem no `web/`)
+
+Era "Peso e Medidas" (nome+conceito antigos) — virou **Avaliação Física** com um nível a mais de hierarquia: **Meta** (`BodyGoal`) é um período de acompanhamento que o usuário cria (nome opcional + peso-alvo obrigatório), e cada meta tem seu **próprio** histórico de registros. Motivo: "se eu uso o app, paro, e 2 anos depois crio uma meta nova, quero começar do zero, não misturar tudo numa lista só" (pedido explícito do usuário) — sem isso, alguém que usa o app por anos teria um único stream contínuo de peso/medidas sem separação entre "tentativa de 2024" e "tentativa de 2026".
+
+- **`extras/index.tsx`** → `extras/avaliacao-fisica/index.tsx` (**lista de metas**, não mais a tela de registro direto): cada meta é um card (nome ou fallback `"Meta de Xkg"`, peso mais recente → peso-alvo, data de criação), `SwipeableRow` pra excluir com confirmação, formulário de criação sempre visível no topo (nome opcional + peso-alvo obrigatório, mesmo padrão inline de criação da Alimentação) — criar navega direto pra dentro da meta recém-criada, não fica só na lista.
+- **`extras/avaliacao-fisica/[goalId].tsx`** — é a tela antiga de "Peso e Medidas" praticamente inalterada por dentro (resumo/gráfico/formulário/histórico, ver bullets abaixo), só que agora **escopada por `goalId`** (vem de `useLocalSearchParams`) em vez de ser um stream global do usuário. Título do `BackHeader` é o nome da meta (`goal?.nome || 'Avaliação Física'`). Trata meta não encontrada (deletada, link velho) com uma tela de "removido" + botão voltar, mesmo padrão 404 já usado em Calendário/Exercícios.
+
+### Modelo de dados
+
+- **`BodyGoal`** (`api/src/models/BodyGoal.ts`) — `_id` **gerado no cliente** (`crypto.randomUUID()`, padrão `Refeicao`/`Categoria`, não o padrão `Attendance`/`BodyMetricEntry` de servidor), `nome?`, `pesoMetaKg` (obrigatório — sem meta não tem "meta"), `createdAt`. **Não** tem model próprio de "meta de peso" mais dentro de `User` — o campo `pesoMetaKg` que morava lá foi removido.
+- **`BodyMetricEntry`** ganhou `goalId` obrigatório; índice único virou `{userId, goalId, date}` (era só `{userId, date}`) — mesma data pode ter um registro em cada meta, não é mais um limite global por dia.
+- **Endpoints**: `api/src/routes/bodyGoals.ts` monta em `/api/body-goals` (`GET/POST /`, `GET/PATCH/DELETE /:id`) **e** aninha `api/src/routes/bodyGoalEntries.ts` em `/:goalId/entries` (`Router({ mergeParams: true })`, senão `req.params.goalId` não aparece dentro do router filho). Um middleware `router.use(...)` no topo do router de entries confere que a meta existe **e** pertence ao usuário antes de qualquer coisa — `goalId` chega cru pela URL, tem que validar posse sempre.
+- **`DELETE /api/body-goals/:id` faz cascade** — apaga a meta e **todos** os `BodyMetricEntry` daquele `goalId` (`deleteMany`) — sem isso, os registros ficariam orfãos e inacessíveis (toda rota de entry exige um `goalId` válido pra sequer responder), só lixo morto no banco.
+- **`GET /api/body-goals` calcula `latestPesoKg` por meta** (N+1 — uma query por meta buscando o registro mais recente com `pesoKg`; aceitável porque metas são poucas por usuário, criadas raramente, não centenas) pra lista mostrar "peso atual → meta" sem precisar abrir cada uma.
+- **Cálculos puros e testados** em `app/src/utils/bodyMetrics.ts` (`bodyMetrics.test.ts`, `node:test` — mesmo padrão do `quickEntryParser.test.ts`, rodar com `npm test` no `app/`): `computeGoalProgressPct` é direction-agnostic — a mesma fórmula (`(atual-início)/(meta-início)`, clampada 0–100) funciona pra meta de perda **e** de ganho, porque numerador e denominador invertem o sinal juntos. `isDeltaFavorable` julga a cor do delta **relativo ao sentido da meta** (quem quer ganhar peso não deve ver `+0.4kg` em vermelho) — sem meta definida, delta renderiza em cor neutra. Delta por medida individual é "vs. registro anterior que tinha aquele campo preenchido" (`findPreviousFieldValue`, anda pra trás na lista), não "este mês" — mais simples e consistente com o delta de peso.
+- **Gráfico de evolução** (`components/weight-trend-chart.tsx`) — usa `react-native-svg` (instalado via `npx expo install`, não versão manual; **exige `npx expo prebuild`** depois de instalar, já que tem código nativo — diferente de tudo mais nesses componentes, que é JS puro). Desenhado à mão com primitivas SVG (`Path`/`Polyline`/`Circle`/`LinearGradient`), sem lib de gráfico completa. Casos extremos: 0 pontos mostra um placeholder de texto em vez de `<Svg>`; 1 ponto mostra só um `Circle` centralizado (não dá pra traçar linha); domínio min/max achatado (todos os valores iguais) vira `valor±1` pra não dividir por zero. Linha tracejada horizontal da meta só aparece se `goalWeightKg` for passado.
+- **Bonequinho de medidas** (`components/body-diagram.tsx`) — pedido explícito do usuário ("vi isso em outro app"), aparece dentro da seção "+ Mais medidas" (só quando expandida). Passou por 3 versões: (1) formas geométricas sem preenchimento, (2) zonas coloridas desenhadas à mão em SVG (elipses/cápsulas, paleta da skill `dataviz`) — descartada porque o usuário achou que ficou **menos** parecido com um corpo humano, não mais, (3) **versão atual**: uma ilustração de verdade (`assets/images/body-diagram.png`, 600×900, fundo transparente, já com os grupos musculares coloridos de fábrica), gerada por IA pelo próprio usuário — confirmado explicitamente que ele mesmo gerou (não é print/asset de outro app; reusar imagem de terceiro sem licença teria sido risco de direito autoral).
+  - **Canvas de design mais largo que a imagem** (`DESIGN_WIDTH`/`DESIGN_HEIGHT` vs imagem ocupando só a faixa central `IMAGE_WIDTH`/`IMAGE_LEFT`) — mesmo truque das versões anteriores, reserva margem dos dois lados só pra texto do rótulo, sem depender da margem transparente que a própria imagem já tem (insuficiente pra caber o texto).
+  - **Pra deixar o desenho maior, o que importa é a proporção altura/largura do canvas, não os valores absolutos** — a largura real em pixels vem do layout do Card (fixa), então aumentar `DESIGN_WIDTH` e `DESIGN_HEIGHT` pelo mesmo fator não muda nada (o fator cancela). O que de fato deixa a imagem e o container maiores é aumentar `DESIGN_HEIGHT` **proporcionalmente mais** que `DESIGN_WIDTH` (canvas mais "alto" por unidade de largura); o tamanho da fonte do rótulo (`fontSize` do `SvgText`) é independente disso e escala à parte.
+  - **Composição em duas camadas**: `Image` (RN puro, `require('../../assets/images/body-diagram.png')` — só funciona com caminho relativo literal, Metro não resolve alias `@/` dentro de `require` de asset) posicionada em pixels absolutos calculados a partir de `onLayout`, com um `Svg` por cima (`StyleSheet.absoluteFill`, mesmo `viewBox` em unidades de design) desenhando só as linhas-guia + `SvgText` — a imagem já traz as cores dos grupos musculares prontas, então o SVG não precisa mais desenhar nenhuma forma preenchida, só os rótulos.
+  - **Pontos de ancoragem de cada zona foram medidos nos pixels reais da imagem** (script Node com `sharp`, amostrando cor ao longo de varreduras verticais/horizontais pra achar onde cada banda de cor começa/termina), não estimados a olho — dado que a imagem tem sombreado realista (render 3D), tentar advinhar coordenada por inspeção visual teria saído impreciso.
+  - **Convenção esquerda/direita = perspectiva de quem olha a imagem** (não espelhamento anatômico) — mesma escolha pragmática das versões anteriores, mais intuitivo pro usuário do que "esquerda anatômica aparece do lado direito da tela".
+  - Imagem original (1024×1536, ~1.3MB) foi redimensionada pra 600×900 (~58KB, `sharp` no Node) antes de entrar no repo — só aparece pequena dentro de um card, não precisa da resolução nativa (evita inflar o tamanho do APK à toa).
+  - **Rótulo em duas linhas** (nome em cima em `theme.textSecondary`, valor embaixo em `Brand.primary` quando o campo está preenchido) — bug real corrigido: com nome+valor numa linha só, valores altos empurravam o texto pra fora da margem reservada e cortava (usuário reportou "palavras ficaram cortadas" depois de digitar números de 3 dígitos). Duas linhas por rótulo exigiu espaçar os slots de `labelY` bem mais (75 unidades entre cada, em vez de ~35) pra não estourar em cima do vizinho. **Valores vêm ao vivo do formulário**, não do último registro salvo: `parseMedidasText()` (`utils/bodyMetrics.ts`, mesma função usada por `handleSave` — extraída de lá pra não duplicar o parse) roda a cada tecla via `useMemo(() => parseMedidasText(medidasText), [medidasText])`, então o boneco atualiza em tempo real conforme o usuário digita.
+  - **Bug real corrigido — nome e valor "desemparelhados" do lado esquerdo**: o ponto onde a linha-guia encosta (perto da figura, pra nunca cruzar por cima do texto) e o ponto onde o texto começa **são coordenadas diferentes** (`LEFT_LINE_X=84` vs `LEFT_TEXT_X=10`). Antes, os dois lados usavam o mesmo x pra linha e texto — do lado direito (`textAnchor="start"`) isso já dava nome+valor com a mesma margem esquerda por acaso, mas do lado esquerdo (`textAnchor="end"`, pra não cruzar a linha) as duas linhas ficavam alinhadas pela **direita**, então nome e valor de comprimentos diferentes pareciam "desencontrados". Fix: os dois lados usam `textAnchor="start"` (mesma convenção), só que a esquerda ancora bem mais perto da borda do canvas (`x=10`) e cresce pra direita **parando antes** de `x=84` (onde a linha-guia efetivamente encosta) — texto e linha nunca ocupam a mesma faixa horizontal, sem precisar mudar o modo de alinhamento entre os lados.
+  - Campos de medida limitados a `maxLength={3}` (só cm inteiro, sem decimal) — reduz o texto do rótulo e ajuda a evitar o corte acima.
+  - Seção "+ Mais medidas" (onde o boneco mora) começa **expandida por padrão** (`medidasExpanded` inicializa `true`) — pedido do usuário, ele usa toda vez.
+- **`components/single-date-picker-modal.tsx`** — variante do `DatePickerModal` existente pra seleção única: escolher um dia já fecha o modal (em vez do padrão multi-seleção do `DatePickerModal`, que fica aberto pra marcar vários dias). Usa `markedColor={Brand.accent}` (laranja) pro dia selecionado — cor deliberadamente diferente do verde de "hoje", senão os dois se confundem quando não coincidem. Recebe `dataDates` (datas que já têm `BodyMetricEntry` **daquela meta**, calculado em `[goalId].tsx` a partir de `entries`) e mostra uma legenda pequena abaixo do calendário (verde=Hoje, laranja=Selecionado, bolinha vermelha=Tem registro).
+  - **`components/month-calendar.tsx`** ganhou dois props novos pra viabilizar isso, ambos com default que preserva o comportamento antigo pro `DatePickerModal` de Alimentação: `markedColor` (cor do círculo "fill", default `Brand.primary`) e `dataDates` (marca uma bolinha vermelha pequena embaixo do número, independente de `markedDates`/`attendanceDates` — mesmo princípio do anel de presença, mais de uma marcação pode aparecer no mesmo dia sem conflitar).
+- **Formulário de registro é sempre visível no topo** (não um botão "Criar" que abre formulário, ao contrário de Exercícios) — escolher uma data que já tem registro pré-preenche os campos a partir do estado local (edição no lugar); salvar é sempre um `PUT` (upsert), nunca cria duplicata pra mesma data.
+- **Histórico é um card colapsável** (mesmo padrão visual de "+ Mais medidas", `historyExpanded` default `false`) com um filtro por data e, dentro de cada linha, **dois botões separados** (lápis + lixeira, `historyActions`) além do swipe-to-delete já existente (`SwipeableRow`) — os dois caminhos de exclusão chamam o mesmo `handleDelete` (`Alert.alert` de confirmação), nenhum bypassa o outro.
+  - **Filtro por data usa o mesmo `SingleDatePickerModal`** do campo de data do formulário (uma segunda instância própria, `historyDatePickerVisible`/`historyFilterDate`) — não é um campo de texto livre; escolher um dia filtra o histórico pra mostrar só o registro daquele dia exato (`entry.date === historyFilterDate`), com um "x" ao lado do botão pra limpar o filtro. Mesmo `dataDates={entryDates}` passado, então a bolinha vermelha de "tem registro" já ajuda a escolher um dia que não vai dar lista vazia.
+- **Editar um registro do histórico rola a tela até o card "Novo registro"** (`handleEditFromHistory` → `loadDateIntoForm` + `scrollToForm`) — mesma técnica de `measureLayout` contra `getNativeScrollRef()` já usada nas telas de Exercícios/Calendário pra "pular pra uma seção" (Fabric exige ref de componente nativo de verdade, não a ref composta do `ScrollView`/`Card`). Como `Card` não usa `forwardRef`, o alvo do `measureLayout` é um `View` extra envolvendo o `Card` do formulário só pra isso, não o `Card` diretamente.
+- **Não existe no `web/` (Vue)** — decisão deliberada de escopo, não uma limitação técnica; o backend já é genérico o bastante pra uma tela web ser adicionada depois sem mudar nada na API.
+
+---
+
 ## Edição de Sets/Reps/Peso
 
 **`components/inline-log-editor.tsx`** (`InlineLogEditor`) — versão compacta usada **dentro da listagem** (uma por linha, tanto em `exercicios/lista.tsx` quanto em `calendario/[date]/[sessaoId]/index.tsx`): 3 campos pequenos (Sets/Reps/Kg) + campo "Rápido" (parser `"3s 10r 10k"`, `parser/quickEntryParser.ts`), **sem nenhum botão de salvar**. Cada grupo (manual e rápido) commita sozinho quando: o campo perde foco (toca fora), o app vai pra segundo plano (`AppState`), ou a linha desmonta (navegou pra outra tela) — só envia os campos que o usuário realmente tocou (`dirty` ref por campo), então passar o dedo pelos campos sem editar nunca dispara um save à toa. Sem ícone de raio (removido a pedido do usuário — achava que sobrecarregava visualmente a listagem).
@@ -101,7 +138,7 @@ Opção na landing da tab Extras (`extras/index.tsx`) — leva pra `extras/alime
 
 ## Calendário
 
-- `calendario/index.tsx` — mês. **Timer não mora mais aqui** (virou global, ver seção própria abaixo).
+- `calendario/index.tsx` — mês.
 - `[date]/index.tsx` — toggle de registrar/desregistrar um treino pro dia + `DayAgenda` (ver abaixo).
 - `[sessaoId]/index.tsx` — exercícios do treino agrupados por categoria, `CategoryJumpBar` fixo no topo.
 - `[exercicioId].tsx` — mesma estrutura de formulário de `exercicios/lista.tsx` (ver seção acima), com Sets/Reps/Peso gravando na sessão em vez do padrão do exercício.
@@ -127,63 +164,9 @@ Checkbox no topo do `DayAgenda` ("Fui na academia neste dia") — modelo `Attend
 
 ---
 
-## Timer de descanso — global (`stores/timerStore.ts` + `notifications/timerAlarmService.ts`)
-
-**Não é mais um componente local de tela** — virou um store Zustand global (`useTimerStore`), porque o timer precisa continuar contando/tocando/ser visível **independente de qual tela está aberta**. Acessível em **Extras > Timer** (`extras/timer.tsx`, UI completa: `components/rest-timer.tsx`) e, quando ativado, também como uma **barra fixa acima das abas** (`components/mini-timer-bar.tsx`, montada em `(tabs)/_layout.tsx`).
-
-Usa **`@notifee/react-native`** (não `expo-notifications` — removido do projeto). Motivo: precisa vibrar continuamente mesmo com a tela desligada/app minimizado, o que exige um serviço em primeiro plano de verdade.
-
-### Barra fixa (`MiniTimerBar`)
-
-Switch em Extras > Timer ("Barra fixa") liga/desliga; junto dele, um seletor do preset padrão que a barra assume quando ativada. A barra fica **colada acima da tab bar de verdade** (não é um overlay flutuante por cima do conteúdo): `(tabs)/_layout.tsx` aumenta a altura do `tabBarStyle` (soma `MINI_TIMER_BAR_HEIGHT`) e usa `paddingTop` igual a essa altura — isso empurra os ícones das abas pra baixo, sobrando o espaço de cima livre pra barra, e o React Navigation **encolhe a área de conteúdo de toda tela sob as abas automaticamente** (não precisa mexer em cada tela individualmente pra abrir espaço).
-
-### Notificação "em andamento" + notificação de conclusão (duas notificações separadas)
-
-- **`RUNNING_NOTIFICATION_ID`** — exibida assim que o timer começa (`showRunningNotification`), com `showChronometer: true` + `chronometerDirection: 'down'` (cronômetro nativo do Android, contando sozinho, sem JS mantendo ela atualizada). Canal próprio, baixa importância, **sem som/vibração** (`RUNNING_CHANNEL_ID`) — só um indicador visual "ainda rodando".
-- **`TIMER_NOTIFICATION_ID`** — o alarme de verdade, um `createTriggerNotification` com `AlarmType.SET_ALARM_CLOCK` (mesmo mecanismo de despertador nativo, imune ao Doze) e `asForegroundService: true`. Quando dispara, o serviço em primeiro plano (`notifee.registerForegroundService`, registrado em escopo de módulo) cancela a notificação "em andamento" e começa a vibrar.
-- **Vibração limitada a 30s** (`MAX_VIBRATION_MS`) — `Vibration.vibrate(pattern, true)` não tem limite embutido; sem o `setTimeout` cancelando sozinho, vibra pra sempre até o usuário interagir.
-- **Rede de segurança no JS** (`timerStore.ts`, dentro de `tick()`) — se por algum motivo o alarme nativo nunca disparar de verdade (permissão de alarme exato negada, processo morto, etc.), o app, ao perceber localmente (via `AppState` ao reabrir) que o tempo já passou, cancela a notificação "em andamento" sozinho — sem isso, o cronômetro nativo continua contando pra números negativos pra sempre, já que nada mais o avisa pra parar.
-
-### Permissão de "Alarmes e lembretes" (`SCHEDULE_EXACT_ALARM`, Android 12+)
-
-Diferente de `POST_NOTIFICATIONS`, não tem popup simples — só uma tela de Configurações que o usuário ativa manualmente por app. `ensureAlarmPermission()` verifica via `notifee.getNotificationSettings()` (`settings.android.alarm`) e chama `notifee.openAlarmPermissionSettings()` se não estiver `ENABLED`, antes de todo `scheduleTimerAlarm`. Sem essa permissão, o Android tende a **adiar a entrega do alarme** até o app voltar ao primeiro plano — sintoma: "só vibra quando eu abro o app de novo".
-
-### Canais Android — imutáveis, versionados, e **precisam ser limpos manualmente**
-
-- Mudar `vibrationPattern`/`sound`/`importance` de um canal já criado no aparelho não tem efeito nenhum ali — é preciso versionar o `channelId` (`CHANNEL_VERSION`) pra forçar um canal novo.
-- **Bug real corrigido**: cada bump de `CHANNEL_VERSION` cria canais novos mas **nunca apaga os antigos** (canal Android sobrevive a rebuild/update do app, só some com desinstalação completa) — usuário viu ~9 "Timer de descanso" duplicados na tela de notificações do celular depois de várias reinstalações ao longo da sessão. Fix: `pruneOldChannels()` roda dentro de `ensureChannels()` a cada `scheduleTimerAlarm`, lista todos os canais existentes (`notifee.getChannels()`) e apaga (`notifee.deleteChannel()`) qualquer um com prefixo `timer-alarm-`/`timer-running-` que não seja um dos IDs da versão atual.
-- **`vibrationPattern` do notifee exige array só com valores positivos e quantidade par** — diferente da `Vibration` pura do RN, que aceita `0` inicial como "atraso".
-- **Setup de canal roda uma vez só por sessão** (`channelsReadyPromise` cacheado) — protegido por número de geração (`generation`, em `timerStore.ts`) contra condição de corrida em cliques rápidos de Play/Pause.
-
-### Ícone de notificação
-
-**Bug real corrigido**: notificação aparecia com uma caixinha preta em vez de ícone. Notificação Android precisa de um ícone **monocromático** (silhueta branca, fundo transparente) — o sistema mascara qualquer cor, e sem um ícone dedicado ele tenta usar o ícone colorido do app (launcher), que vira essa caixa preta. Ícone gerado (mesmo halter do `AuthBadge`, branco) em `assets/images/notification-icon.png`, copiado pro recurso Android via plugin (`withNotificationIcon.js`, ver abaixo) e referenciado como `smallIcon: 'ic_notification'` nas duas notificações.
-
-### Bug real corrigido — funciona em debug (Android Studio), quebra no APK de release
-
-Build de **release** roda R8/minificação (debug não roda por padrão) — como nada no código do app referencia as classes do notifee pelo nome (só o `AndroidManifest.xml`, via `<service android:name="app.notifee.core.ForegroundService">`), o R8 pode remover/renomear essas classes sem perceber que são necessárias, quebrando o serviço em primeiro plano **silenciosamente**, só em release. Fix: regras `-keep class app.notifee.core.** { *; }` e `-keep class io.invertase.notifee.** { *; }` em `android/app/proguard-rules.pro` (durável via plugin `withNotifeeProguardRules.js`, já que `android/` é gerado/descartável).
-
-### `android/` é descartável (gitignored) — mudanças nativas do notifee viram plugins de config
-
-Como a pasta `android/` não é versionada (Continuous Native Generation — `npx expo prebuild --clean` recria do zero), qualquer ajuste nativo precisa ser um **plugin de Expo config** em `plugins/`, referenciado em `app.json > plugins`, senão some no próximo prebuild. Quatro plugins criados pra esse recurso, nenhum tem plugin oficial do notifee equivalente:
-- **`withNotifeeMavenRepo.js`** — `app.notifee:core` só existe num Maven repo **local**, empacotado dentro do próprio `node_modules` (não está no Google Maven/Maven Central/JitPack). O próprio `build.gradle` do notifee tenta se registrar via `rootProject.allprojects{repositories{...}}`, mas isso roda tarde demais quando o Gradle usa `--configure-on-demand` (flag que `expo run:android` sempre passa) — bug antigo, nunca corrigido upstream (o notifee está arquivado/descontinuado). Fix: registra o repo local diretamente no `build.gradle` raiz.
-- **`withNotifeeForegroundService.js`** — declara `<service android:name="app.notifee.core.ForegroundService" android:foregroundServiceType="systemExempted">` no manifest (obrigatório a partir do Android 14; `systemExempted` é o tipo recomendado pra apps de alarme/timer que seguram `SCHEDULE_EXACT_ALARM`).
-- **`withNotificationIcon.js`** — copia `assets/images/notification-icon.png` pra `android/app/src/main/res/drawable/ic_notification.png` a cada prebuild.
-- **`withNotifeeProguardRules.js`** — injeta as regras de `-keep` (ver bug de release acima) em `android/app/proguard-rules.pro`.
-
-### Permissões necessárias (`app.json > android.permissions`)
-
-`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `WAKE_LOCK`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SYSTEM_EXEMPTED`.
-
-### Restrições específicas de fabricante (MIUI/Xiaomi e similares)
-
-Mesmo com tudo acima correto, fabricantes como Xiaomi têm restrições **próprias**, além das do Android puro, que podem impedir o serviço em segundo plano de funcionar: "Início automático" (Autostart) desativado pro app, e economia de bateria "restrita" em vez de "sem restrições". Não tem como contornar isso via código — é o usuário quem precisa liberar manualmente nas Configurações do aparelho.
-
----
-
 ## Toast (`app/src/components/toast.tsx`)
 
-`showToast(mensagem, tipo?)` — `'success'` (verde, padrão) ou `'error'` (vermelho). **Ancorado no topo da tela** (`insets.top + gap`), não mais acima da tab bar — mudou depois que a barra fixa do timer passou a ocupar esse espaço (ver seção do Timer); embaixo ficava fácil de esconder atrás da `MiniTimerBar` ou das próprias abas.
+`showToast(mensagem, tipo?)` — `'success'` (verde, padrão) ou `'error'` (vermelho). **Ancorado no topo da tela** (`insets.top + gap`), não embaixo — deixar acompanhando a tab bar deixava fácil de esconder atrás dela.
 
 ## LoadingView (`app/src/components/loading-view.tsx`)
 
@@ -196,7 +179,7 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
 ## Fonte (Poppins) e identidade visual
 
 - **`@expo-google-fonts/poppins`** carregado via `useFonts` em `app/_layout.tsx` (splash nativa só libera quando tema **e** fonte estiverem prontos — evita flash trocando de fonte na tela). `constants/theme.ts` exporta `FontFamily` (`regular`/`medium`/`semibold`/`bold`/`extrabold`) mapeado nos estilos de `ThemedText`.
-- **Cada peso do Poppins é um arquivo/família separado** (não é fonte variável) — `ThemedText` seta `fontFamily` direto por `type`, **sem** `fontWeight` junto. Texto que força negrito via `fontWeight` inline (fora do `type` do `ThemedText`) não pega o peso certo de forma confiável, principalmente no Android — poucos lugares assim ainda existem no app (ex: número do timer), aceito como imperfeição cosmética menor.
+- **Cada peso do Poppins é um arquivo/família separado** (não é fonte variável) — `ThemedText` seta `fontFamily` direto por `type`, **sem** `fontWeight` junto. Texto que força negrito via `fontWeight` inline (fora do `type` do `ThemedText`) não pega o peso certo de forma confiável, principalmente no Android.
 - **Ícone do app e splash** — antes eram o ícone padrão de template do Expo (símbolo azul), nunca customizados. Agora replicam o `AuthBadge` (badge verde em gradiente + halter branco + faísca laranja), gerados como PNG a partir de um SVG desenhado à mão (halter = 3 retângulos arredondados, sem depender de fonte de ícone). Cor de fundo da splash e do ícone adaptativo do Android trocada de azul (`#208AEF`)/azul claro (`#E6F4FE`) pro verde da marca (`#15b580`). `assets/expo.icon` (bundle de ícone multi-aparência do iOS 18, também nunca customizado) foi removido — iOS usa o `icon.png` geral agora.
 
 ---
@@ -212,7 +195,7 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
   - URL fica no formato `https://site--<projeto>--<hash>.code.run` — testar `/api/health` antes de trocar o `EXPO_PUBLIC_API_URL` do app.
 - **`.env` do app fica gravado dentro do APK no build** — não é lido em runtime. Pra local: `http://10.0.2.2:4000` (só funciona no emulador). Pra produção: a URL da API hospedada (Render ou Northflank).
 - **Gerar APK menor**: `gradle.properties` tem `android.enableMinifyInReleaseBuilds`/`enableShrinkResourcesInReleaseBuilds` ligados (só afeta `release`, não o `debug` do emulador). Pra instalar no celular físico, sempre usar `-PreactNativeArchitectures=arm64-v8a` (senão builda pra 4 arquiteturas, ~4x o tamanho — não mudar o padrão do `gradle.properties`, isso quebraria o emulador x86).
-- **Minificação de release pode quebrar módulo nativo silenciosamente** (ver bug do notifee na seção do Timer) — se algo funciona no `expo run:android`/Android Studio (debug, sem minificação) mas falha só no APK instalado (release, minificado), suspeitar de regra de ProGuard faltando antes de qualquer outra coisa.
+- **Minificação de release pode quebrar módulo nativo silenciosamente** — se algo funciona no `expo run:android`/Android Studio (debug, sem minificação) mas falha só no APK instalado (release, minificado), suspeitar de regra de ProGuard faltando antes de qualquer outra coisa (R8 pode remover/renomear uma classe nativa referenciada só por nome, ex: num `AndroidManifest.xml`, sem perceber que ela é necessária).
 - **`--rerun-tasks` obrigatório** ao gerar o APK de release: o Gradle não rastreia o `.env` como input de task, então reaproveita o bundle JS antigo silenciosamente se só o `.env` mudou. Comando completo:
   ```powershell
   cd android
@@ -232,7 +215,7 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
 
 ## Web (`web/`)
 
-Companion desktop do app RN — mesma API, mesmo banco, sem timer de descanso (não faz sentido fora do celular). Stack: Vite + Vue 3 + Vuetify 3, **sem** Nuxt/SSR (SPA pura, `vue-router` com `createWebHistory`, Pinia só pra auth). Layout de dashboard com sidebar fixa (verde, gradiente, mesma cor da marca `#15b580`) em vez do layout de abas do RN — funcionalidade replicada, visual não.
+Companion desktop do app RN — mesma API, mesmo banco. Stack: Vite + Vue 3 + Vuetify 3, **sem** Nuxt/SSR (SPA pura, `vue-router` com `createWebHistory`, Pinia só pra auth). Layout de dashboard com sidebar fixa (verde, gradiente, mesma cor da marca `#15b580`) em vez do layout de abas do RN — funcionalidade replicada, visual não.
 
 ### Autenticação — dual-mode na mesma API Express
 

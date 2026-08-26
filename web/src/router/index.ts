@@ -80,6 +80,17 @@ const router = createRouter({
           props: true,
         },
         { path: 'relatorios', name: 'relatorios', component: () => import('../pages/RelatoriosPage.vue') },
+        {
+          path: 'avaliacao-fisica',
+          name: 'avaliacao-fisica',
+          component: () => import('../pages/AvaliacaoFisicaPage.vue'),
+        },
+        {
+          path: 'avaliacao-fisica/:id',
+          name: 'avaliacao-fisica-detalhe',
+          component: () => import('../pages/AvaliacaoFisicaDetailPage.vue'),
+          props: true,
+        },
         { path: 'conta', name: 'conta', component: () => import('../pages/ContaPage.vue') },
       ],
     },

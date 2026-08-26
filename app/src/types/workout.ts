@@ -65,11 +65,6 @@ export interface DiaTreino {
   date: string;
 }
 
-export interface TimerPreset {
-  _id: string;
-  seconds: number;
-}
-
 export interface RefeicaoItem {
   _id: string;
   nome: string;
@@ -88,4 +83,36 @@ export interface Refeicao {
   dates: string[];
   blocos: RefeicaoBloco[];
   observacoes?: string;
+}
+
+export interface BodyMetricMedidas {
+  cintura?: number;
+  quadril?: number;
+  peito?: number;
+  pescoco?: number;
+  bracoEsquerdo?: number;
+  bracoDireito?: number;
+  coxaEsquerda?: number;
+  coxaDireita?: number;
+}
+
+export interface BodyMetricEntry {
+  _id: string;
+  date: string;
+  pesoKg?: number;
+  medidas?: BodyMetricMedidas;
+  observacoes?: string;
+}
+
+export interface BodyGoal {
+  _id: string;
+  nome?: string;
+  pesoMetaKg: number;
+  createdAt: string;
+}
+
+/** What `GET /api/body-goals` returns — the base goal plus the most recent weight logged under
+ * it (`null` if none yet), computed server-side so the list can show progress at a glance. */
+export interface BodyGoalSummary extends BodyGoal {
+  latestPesoKg: number | null;
 }

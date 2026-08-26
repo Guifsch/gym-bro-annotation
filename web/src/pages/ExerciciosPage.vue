@@ -317,19 +317,23 @@ async function confirmDelete(): Promise<void> {
           <div v-else-if="expandedIds.has(grupo.categoria._id)" class="exercicio-grid pa-4">
             <VCard v-for="exercicio in grupo.exercicios" :key="exercicio._id" variant="outlined" class="exercicio-card">
               <RouterLink :to="`/exercicios/${exercicio._id}`" class="exercicio-card__link">
-                <VImg v-if="exercicio.capa" :src="exercicio.capa.url" aspect-ratio="1" cover />
+                <VImg v-if="exercicio.capa" :src="exercicio.capa.url" aspect-ratio="1" cover class="exercicio-card__img" />
                 <div v-else class="exercicio-card__placeholder">
-                  <VIcon icon="mdi-dumbbell" size="32" />
+                  <VIcon icon="mdi-dumbbell" size="34" />
                 </div>
               </RouterLink>
-              <VCardText>
+              <VCardText class="exercicio-card__body">
                 <RouterLink :to="`/exercicios/${exercicio._id}`" class="exercicio-card__link">
-                  <p class="font-weight-medium">{{ exercicio.nome }}</p>
-                  <p class="text-body-2 text-medium-emphasis mb-3">
-                    {{ exercicio.sets }}x{{ exercicio.reps }} · {{ exercicio.pesoKg }}kg
-                  </p>
+                  <p class="font-weight-medium exercicio-card__nome">{{ exercicio.nome }}</p>
                 </RouterLink>
-                <div class="d-flex justify-space-between">
+                <div class="d-flex flex-wrap ga-1 mt-2">
+                  <VChip size="x-small" variant="tonal" class="exercicio-card__chip">{{ exercicio.sets }}x{{ exercicio.reps }}</VChip>
+                  <VChip size="x-small" variant="tonal" class="exercicio-card__chip" :style="{ color: grupo.color }">
+                    {{ exercicio.pesoKg }} kg
+                  </VChip>
+                </div>
+                <VDivider class="my-2" />
+                <div class="d-flex justify-end ga-1">
                   <VBtn icon="mdi-pencil-outline" variant="text" size="small" :to="`/exercicios/${exercicio._id}`" />
                   <VBtn
                     icon="mdi-trash-can-outline"
@@ -456,5 +460,55 @@ async function confirmDelete(): Promise<void> {
   text-decoration: none;
   display: block;
   min-width: 0;
+}
+
+.exercicio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.exercicio-card {
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.exercicio-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.exercicio-card__link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.exercicio-card__img {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.exercicio-card__placeholder {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgba(var(--v-theme-primary), 0.55);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.exercicio-card__body {
+  padding: 12px 14px 8px;
+}
+
+.exercicio-card__nome {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exercicio-card__chip :deep(.v-chip__content) {
+  font-size: 0.75rem;
 }
 </style>

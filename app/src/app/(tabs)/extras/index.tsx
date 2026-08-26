@@ -48,16 +48,16 @@ export default function ExtrasLandingScreen() {
           onPress={() => router.push('/(tabs)/extras/alimentacao')}
         />
         <LandingOption
-          icon="timer-outline"
-          title="Timer"
-          subtitle="Timer de descanso e barra fixa"
-          onPress={() => router.push('/(tabs)/extras/timer')}
-        />
-        <LandingOption
           icon="stats-chart-outline"
           title="Relatórios"
           subtitle="Estatísticas de frequência na academia"
           onPress={() => router.push('/(tabs)/extras/relatorios')}
+        />
+        <LandingOption
+          icon="body-outline"
+          title="Avaliação Física"
+          subtitle="Acompanhe suas metas de peso e medidas"
+          onPress={() => router.push('/(tabs)/extras/avaliacao-fisica')}
         />
       </SafeAreaView>
     </ThemedView>

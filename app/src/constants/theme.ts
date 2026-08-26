@@ -33,6 +33,7 @@ export const Brand = {
   primary: '#15b580',
   primaryDark: '#138e5f',
   accent: '#FF7A45',
+  today: '#03570a',
 } as const;
 
 /** Poppins, loaded via `useFonts` in the root layout — see `ThemedText` for how these map to

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
@@ -133,7 +132,7 @@ export default function CalendarioScreen() {
                   },
                 ]}>
                 <View style={styles.legendItem}>
-                  <LinearGradient colors={[Brand.primary, Brand.primaryDark]} style={styles.legendSwatch} />
+                  <View style={[styles.legendSwatch, { backgroundColor: Brand.today }]} />
                   <ThemedText type="small">Hoje</ThemedText>
                 </View>
                 <View style={styles.legendItem}>
