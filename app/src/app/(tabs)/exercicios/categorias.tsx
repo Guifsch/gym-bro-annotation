@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
@@ -10,7 +10,7 @@ import {
   createCategoria,
   deleteCategoria,
   deleteExercicio,
-  listCategorias,
+  listCategoriasPage,
   listExercicios,
   updateCategoria,
 } from '@/api/workoutApi';
@@ -21,37 +21,40 @@ import { EmptyState } from '@/components/empty-state';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
+import { ListFooterSpinner } from '@/components/list-footer-spinner';
 import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
+import { usePaginatedList } from '@/hooks/use-paginated-list';
 import type { Categoria, Exercicio } from '@/types/workout';
 
 export default function CategoriasScreen() {
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const {
+    items: categorias,
+    setItems: setCategorias,
+    loading,
+    loadingMore,
+    hasMore,
+    reload,
+    loadMore,
+  } = usePaginatedList(listCategoriasPage);
   const [exercicios, setExercicios] = useState<Exercicio[]>([]);
-  const [loading, setLoading] = useState(true);
   const [novoNome, setNovoNome] = useState('');
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingNome, setEditingNome] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [categoriasData, exerciciosData] = await Promise.all([listCategorias(), listExercicios()]);
-      setCategorias(categoriasData);
-      setExercicios(exerciciosData);
-    } finally {
-      setLoading(false);
-    }
+  const loadExercicios = useCallback(async () => {
+    setExercicios(await listExercicios());
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      reload();
+      loadExercicios();
+    }, [reload, loadExercicios])
   );
 
   const exerciciosPorCategoria = useMemo(() => {
@@ -132,81 +135,84 @@ export default function CategoriasScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <BackHeader title="Categorias" />
 
-        <ScrollView
+        <FlatList
+          data={categorias}
+          keyExtractor={(item) => item._id}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
-          <Card style={styles.formCard}>
-            <LabeledTextField
-              placeholder="Nova categoria"
-              value={novoNome}
-              onChangeText={setNovoNome}
-              maxLength={120}
-            />
-            <GradientButton title="Adicionar" onPress={handleCreate} loading={creating} disabled={!novoNome.trim()} />
-          </Card>
-
-          {!loading && categorias.length === 0 ? (
-            <EmptyState icon="pricetags-outline" title="Nenhuma categoria ainda." />
-          ) : (
-            <View style={styles.list}>
-              {categorias.map((item) => {
-                const exerciciosDaCategoria = exerciciosPorCategoria.get(item._id) ?? [];
-                return (
-                  <View key={item._id} style={styles.categoriaBlock}>
-                    {editingId === item._id ? (
-                      <Card style={styles.editRow}>
-                        <View style={{ flex: 1 }}>
-                          <LabeledTextField value={editingNome} onChangeText={setEditingNome} autoFocus maxLength={120} />
-                        </View>
-                        <Pressable onPress={handleSaveEdit} hitSlop={8}>
-                          <ThemedText type="linkPrimary">salvar</ThemedText>
-                        </Pressable>
-                        <Pressable onPress={() => setEditingId(null)} hitSlop={8}>
-                          <ThemedText type="small">cancelar</ThemedText>
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          onEndReachedThreshold={0.4}
+          onEndReached={hasMore ? loadMore : undefined}
+          ListHeaderComponent={
+            <Card style={styles.formCard}>
+              <LabeledTextField
+                placeholder="Nova categoria"
+                value={novoNome}
+                onChangeText={setNovoNome}
+                maxLength={120}
+              />
+              <GradientButton title="Adicionar" onPress={handleCreate} loading={creating} disabled={!novoNome.trim()} />
+            </Card>
+          }
+          ListHeaderComponentStyle={styles.formHeader}
+          ListEmptyComponent={!loading ? <EmptyState icon="pricetags-outline" title="Nenhuma categoria ainda." /> : null}
+          ListFooterComponent={<ListFooterSpinner visible={loadingMore} />}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => {
+            const exerciciosDaCategoria = exerciciosPorCategoria.get(item._id) ?? [];
+            return (
+              <View style={styles.categoriaBlock}>
+                {editingId === item._id ? (
+                  <Card style={styles.editRow}>
+                    <View style={{ flex: 1 }}>
+                      <LabeledTextField value={editingNome} onChangeText={setEditingNome} autoFocus maxLength={120} />
+                    </View>
+                    <Pressable onPress={handleSaveEdit} hitSlop={8}>
+                      <ThemedText type="linkPrimary">salvar</ThemedText>
+                    </Pressable>
+                    <Pressable onPress={() => setEditingId(null)} hitSlop={8}>
+                      <ThemedText type="small">cancelar</ThemedText>
+                    </Pressable>
+                  </Card>
+                ) : (
+                  <SwipeableRow onDelete={() => handleDelete(item)}>
+                    <Pressable onPress={() => startEditing(item)}>
+                      <Card style={styles.row}>
+                        <CategoryIcon nome={item.nome} />
+                        <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
+                        <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                          <Ionicons name="trash-outline" size={18} color="#e53935" />
                         </Pressable>
                       </Card>
-                    ) : (
-                      <SwipeableRow onDelete={() => handleDelete(item)}>
-                        <Pressable onPress={() => startEditing(item)}>
-                          <Card style={styles.row}>
-                            <CategoryIcon nome={item.nome} />
-                            <ThemedText style={{ flex: 1 }}>{item.nome}</ThemedText>
-                            <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                              <Ionicons name="trash-outline" size={18} color="#e53935" />
-                            </Pressable>
-                          </Card>
-                        </Pressable>
-                      </SwipeableRow>
-                    )}
+                    </Pressable>
+                  </SwipeableRow>
+                )}
 
-                    {exerciciosDaCategoria.length > 0 && (
-                      <View style={styles.exerciciosList}>
-                        {exerciciosDaCategoria.map((exercicio) => (
-                          <View key={exercicio._id} style={styles.exercicioRow}>
-                            <ExercicioThumbnail exercicio={exercicio} categoriaNome={item.nome} size={22} />
-                            <ThemedText type="small" style={{ flex: 1 }}>
-                              {exercicio.nome}
-                            </ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {exercicio.sets}x{exercicio.reps} · {exercicio.pesoKg}kg
-                            </ThemedText>
-                            <Pressable
-                              onPress={() => handleDeleteExercicio(exercicio)}
-                              hitSlop={8}
-                              style={styles.deleteButton}>
-                              <Ionicons name="trash-outline" size={16} color="#e53935" />
-                            </Pressable>
-                          </View>
-                        ))}
+                {exerciciosDaCategoria.length > 0 && (
+                  <View style={styles.exerciciosList}>
+                    {exerciciosDaCategoria.map((exercicio) => (
+                      <View key={exercicio._id} style={styles.exercicioRow}>
+                        <ExercicioThumbnail exercicio={exercicio} categoriaNome={item.nome} size={22} />
+                        <ThemedText type="small" style={{ flex: 1 }}>
+                          {exercicio.nome}
+                        </ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {exercicio.sets}x{exercicio.reps} · {exercicio.pesoKg}kg
+                        </ThemedText>
+                        <Pressable
+                          onPress={() => handleDeleteExercicio(exercicio)}
+                          hitSlop={8}
+                          style={styles.deleteButton}>
+                          <Ionicons name="trash-outline" size={16} color="#e53935" />
+                        </Pressable>
                       </View>
-                    )}
+                    ))}
                   </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
+                )}
+              </View>
+            );
+          }}
+        />
       </SafeAreaView>
     </ThemedView>
   );
@@ -215,9 +221,10 @@ export default function CategoriasScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
-  scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
+  scrollContent: { paddingBottom: Spacing.five },
   formCard: { gap: Spacing.two },
-  list: { gap: Spacing.three },
+  formHeader: { marginBottom: Spacing.three },
+  separator: { height: Spacing.three },
   categoriaBlock: { gap: Spacing.one },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   editRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },

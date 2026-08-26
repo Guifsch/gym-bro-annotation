@@ -253,14 +253,14 @@ async function confirmDelete(): Promise<void> {
           </div>
 
           <RouterLink :to="`/treinos/${treino._id}`" class="treino-info">
-            <p class="font-weight-bold">{{ treino.nome }}</p>
-            <p class="text-body-2 text-medium-emphasis mb-3">{{ treino.exercicioIds.length }} exercício(s)</p>
+            <p class="font-weight-bold treino-card__nome">{{ treino.nome }}</p>
           </RouterLink>
 
-          <div class="d-flex justify-space-between text-caption text-medium-emphasis">
-            <span>{{ treino.exercicioIds.length }} exercícios</span>
-            <span>Criado em {{ formatDate(treino.createdAt) }}</span>
-          </div>
+          <VChip size="small" variant="tonal" color="primary" class="mt-2">
+            {{ treino.exercicioIds.length }} exercício{{ treino.exercicioIds.length === 1 ? '' : 's' }}
+          </VChip>
+
+          <p class="text-caption text-medium-emphasis mt-2 mb-0">Criado em {{ formatDate(treino.createdAt) }}</p>
         </VCardText>
       </VCard>
     </div>
@@ -346,6 +346,21 @@ async function confirmDelete(): Promise<void> {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
+}
+
+.treino-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.treino-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.treino-card__nome {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .empty-state {

@@ -61,13 +61,23 @@ const ZONES: MeasureZone[] = [
 ];
 
 // The leader line always lands close to the figure (safe: text sits entirely on the far side of
-// this point from the incoming line, so the line never crosses through the glyphs). The text's
-// own start position is decoupled from that — left-side text starts near the canvas edge and
-// grows toward (but stops short of) the line's landing point, so both lines of a label share the
-// same left edge, matching how the right side already reads (name and value visibly "paired").
+// this point from the incoming line, so the line never crosses through the glyphs).
 const LEFT_LINE_X = 84;
-const LEFT_TEXT_X = 10;
 const RIGHT_LABEL_X = 296;
+
+// Both sides keep a fixed visual gap between the line's landing point and the near edge of the
+// text. On the right that's trivial (text just starts `RIGHT_LABEL_GAP` past the line). On the
+// left, text is start-anchored (so a zone's name/value share the same left edge — see below),
+// which means the near edge is the text's *right* edge, whose position depends on string width —
+// and that width isn't fixed, since the value can be 1-3 digits depending on what the user typed.
+// So it's computed per zone from an estimated width instead of a hand-tuned constant.
+const LEFT_LABEL_GAP = 6;
+const RIGHT_LABEL_GAP = 10;
+const CHARS_WIDTH_AT_FONT_SIZE_14 = 8;
+
+function estimateTextWidth(text: string): number {
+  return text.length * CHARS_WIDTH_AT_FONT_SIZE_14;
+}
 
 export function BodyDiagram({ values }: BodyDiagramProps) {
   const theme = useTheme();
@@ -98,9 +108,17 @@ export function BodyDiagram({ values }: BodyDiagramProps) {
           <Svg style={StyleSheet.absoluteFill} width={width} height={renderHeight} viewBox={`0 0 ${DESIGN_WIDTH} ${DESIGN_HEIGHT}`}>
             {ZONES.map(({ key, point, labelY, side }) => {
               const value = values[key];
-              const lineX = side === 'left' ? LEFT_LINE_X : RIGHT_LABEL_X;
-              const textX = side === 'left' ? LEFT_TEXT_X : RIGHT_LABEL_X;
               const label = MEDIDA_LABELS[key];
+              const valueText = value !== undefined ? `${value}cm` : null;
+              const lineX = side === 'left' ? LEFT_LINE_X : RIGHT_LABEL_X;
+
+              const textX =
+                side === 'left'
+                  ? LEFT_LINE_X -
+                    LEFT_LABEL_GAP -
+                    Math.max(estimateTextWidth(label), valueText ? estimateTextWidth(valueText) : 0)
+                  : RIGHT_LABEL_X + RIGHT_LABEL_GAP;
+
               return (
                 <G key={key}>
                   <Line
@@ -115,9 +133,9 @@ export function BodyDiagram({ values }: BodyDiagramProps) {
                   <SvgText x={textX} y={labelY} dy={5} fontSize={14} fill={theme.textSecondary} textAnchor="start">
                     {label}
                   </SvgText>
-                  {value !== undefined && (
+                  {valueText && (
                     <SvgText x={textX} y={labelY + 17} dy={5} fontSize={14} fill={Brand.primary} textAnchor="start">
-                      {value}cm
+                      {valueText}
                     </SvgText>
                   )}
                 </G>

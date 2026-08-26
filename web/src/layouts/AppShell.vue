@@ -115,7 +115,7 @@ async function handleLogout(): Promise<void> {
     </VAppBar>
 
     <VMain scrollable>
-      <VContainer class="page-container pa-8">
+      <VContainer fluid class="page-container pa-8">
         <RouterView />
       </VContainer>
     </VMain>
@@ -123,6 +123,10 @@ async function handleLogout(): Promise<void> {
 </template>
 
 <style scoped>
+.page-container {
+  max-width: 1440px;
+}
+
 .app-drawer {
   background: linear-gradient(180deg, #0c573f 0%, #0b7a56 100%) !important;
   border: none !important;

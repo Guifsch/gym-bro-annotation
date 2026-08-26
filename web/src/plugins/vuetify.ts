@@ -37,6 +37,8 @@ export default createVuetify({
           info: '#2f6fa8',
           warning: '#d2902d',
           error: '#c94b3f',
+          'on-success': '#ffffff',
+          'on-error': '#ffffff',
         },
       },
       gymBroDark: {
@@ -50,6 +52,8 @@ export default createVuetify({
           info: '#6ba3d6',
           warning: '#e0a548',
           error: '#e08a7d',
+          'on-success': '#ffffff',
+          'on-error': '#ffffff',
         },
       },
     },

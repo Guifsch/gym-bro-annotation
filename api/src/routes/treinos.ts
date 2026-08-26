@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/requireAuth';
 import { Sessao } from '../models/Sessao';
 import { Treino } from '../models/Treino';
 import { asyncHandler } from '../utils/asyncHandler';
+import { paginateFind, parseLimit, type SortSpec } from '../utils/pagination';
 import { createTreinoSchema, updateTreinoSchema } from '../validation/workout';
 
 const router = Router();
@@ -13,11 +14,21 @@ router.use(requireAuth);
 
 const MAX_TREINOS = 50;
 
+// See exercicios.ts for why the default limit equals the resource's own hard cap.
+const TREINOS_SORT: SortSpec[] = [
+  { field: 'nome', direction: 1 },
+  { field: '_id', direction: 1 },
+];
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const treinos = await Treino.find({ userId: req.user!.id }).sort({ nome: 1 });
-    res.status(200).json({ treinos });
+    const limit = parseLimit(req.query.limit, MAX_TREINOS);
+    const { items: treinos, nextCursor } = await paginateFind(Treino, { userId: req.user!.id }, TREINOS_SORT, {
+      cursor: req.query.cursor,
+      limit,
+    });
+    res.status(200).json({ treinos, nextCursor });
   })
 );
 

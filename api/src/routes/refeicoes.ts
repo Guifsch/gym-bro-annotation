@@ -3,12 +3,21 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { Refeicao } from '../models/Refeicao';
 import { asyncHandler } from '../utils/asyncHandler';
+import { paginateFind, parseLimit, type SortSpec } from '../utils/pagination';
 import { createRefeicaoSchema, updateRefeicaoSchema } from '../validation/refeicao';
 
 const router = Router();
 router.use(requireAuth);
 
 const MAX_REFEICOES = 200;
+
+// See exercicios.ts for why the default limit equals the resource's own hard cap. `createdAt`'s
+// cursor value round-trips through JSON as an ISO string, so it needs `parse` to become a real
+// `Date` again before Mongo compares it against the `Date`-typed field.
+const REFEICOES_SORT: SortSpec[] = [
+  { field: 'createdAt', direction: -1, parse: (raw) => new Date(raw as string) },
+  { field: '_id', direction: 1 },
+];
 
 interface ItemInput {
   id: string;
@@ -38,8 +47,12 @@ function mapBlocos(blocos: BlocoInput[]) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const refeicoes = await Refeicao.find({ userId: req.user!.id }).sort({ createdAt: -1 });
-    res.status(200).json({ refeicoes });
+    const limit = parseLimit(req.query.limit, MAX_REFEICOES);
+    const { items: refeicoes, nextCursor } = await paginateFind(Refeicao, { userId: req.user!.id }, REFEICOES_SORT, {
+      cursor: req.query.cursor,
+      limit,
+    });
+    res.status(200).json({ refeicoes, nextCursor });
   })
 );
 

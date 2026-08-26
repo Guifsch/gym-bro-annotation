@@ -4,20 +4,34 @@ import { requireAuth } from '../middleware/requireAuth';
 import { Categoria } from '../models/Categoria';
 import { Exercicio } from '../models/Exercicio';
 import { asyncHandler } from '../utils/asyncHandler';
+import { paginateFind, parseLimit, type SortSpec } from '../utils/pagination';
 import { createCategoriaSchema, updateCategoriaSchema } from '../validation/workout';
 
 const router = Router();
 router.use(requireAuth);
 
+const MAX_CATEGORIAS = 50;
+
+// See exercicios.ts for why the default limit equals the resource's own hard cap.
+const CATEGORIAS_SORT: SortSpec[] = [
+  { field: 'ordem', direction: 1 },
+  { field: 'nome', direction: 1 },
+  { field: '_id', direction: 1 },
+];
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const categorias = await Categoria.find({ userId: req.user!.id }).sort({ ordem: 1, nome: 1 });
-    res.status(200).json({ categorias });
+    const limit = parseLimit(req.query.limit, MAX_CATEGORIAS);
+    const { items: categorias, nextCursor } = await paginateFind(
+      Categoria,
+      { userId: req.user!.id },
+      CATEGORIAS_SORT,
+      { cursor: req.query.cursor, limit }
+    );
+    res.status(200).json({ categorias, nextCursor });
   })
 );
-
-const MAX_CATEGORIAS = 50;
 
 router.post(
   '/',

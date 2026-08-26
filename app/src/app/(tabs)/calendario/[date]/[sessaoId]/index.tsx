@@ -22,6 +22,8 @@ import { enqueueUpsertSessaoEntry } from '@/offline/queue';
 import type { Categoria, Exercicio, LogFields, Sessao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
 
+const PAGE_SIZE = 30;
+
 interface CategoriaSection {
   categoriaId: string;
   nome: string;
@@ -38,6 +40,10 @@ export default function SessaoDetalheScreen() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // The treino's own exercicioIds are already fully fetched (bounded by MAX_EXERCICIOS, cheap) —
+  // this just reveals them into the SectionList 30 at a time on scroll, matching the infinite-scroll
+  // UX used elsewhere, instead of paginating a network call that isn't actually needed here.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
     const sessaoData = await getSessao(sessaoId);
@@ -56,6 +62,7 @@ export default function SessaoDetalheScreen() {
     useCallback(() => {
       setLoading(true);
       setNotFound(false);
+      setVisibleCount(PAGE_SIZE);
       load()
         .catch(() => setNotFound(true))
         .finally(() => setLoading(false));
@@ -94,10 +101,19 @@ export default function SessaoDetalheScreen() {
   const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
   const headerRefs = useRef<Record<string, View | null>>({});
 
+  const visibleExercicioIds = useMemo(
+    () => treino?.exercicioIds.slice(0, visibleCount) ?? [],
+    [treino, visibleCount]
+  );
+  const hasMore = (treino?.exercicioIds.length ?? 0) > visibleExercicioIds.length;
+
+  function loadMore() {
+    setVisibleCount((count) => count + PAGE_SIZE);
+  }
+
   const gruposPorCategoria = useMemo(() => {
-    if (!treino) return [];
     const map = new Map<string, Exercicio[]>();
-    for (const exercicioId of treino.exercicioIds) {
+    for (const exercicioId of visibleExercicioIds) {
       const exercicio = exercicioById[exercicioId];
       if (!exercicio) continue;
       const arr = map.get(exercicio.categoriaId) ?? [];
@@ -109,7 +125,7 @@ export default function SessaoDetalheScreen() {
       nome: categoriaNomeById[categoriaId] ?? 'Categoria removida',
       exercicios: exerciciosDaCategoria,
     }));
-  }, [treino, exercicioById, categoriaNomeById]);
+  }, [visibleExercicioIds, exercicioById, categoriaNomeById]);
 
   const sections = useMemo<CategoriaSection[]>(
     () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
@@ -190,6 +206,8 @@ export default function SessaoDetalheScreen() {
               initialNumToRender={100}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
+              onEndReachedThreshold={0.4}
+              onEndReached={hasMore ? loadMore : undefined}
               renderSectionHeader={({ section }) => (
                 <View
                   ref={(el) => {

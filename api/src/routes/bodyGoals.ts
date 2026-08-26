@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/requireAuth';
 import { BodyGoal } from '../models/BodyGoal';
 import { BodyMetricEntry } from '../models/BodyMetricEntry';
 import { asyncHandler } from '../utils/asyncHandler';
+import { paginateFind, parseLimit, type SortSpec } from '../utils/pagination';
 import { createBodyGoalSchema, updateBodyGoalSchema } from '../validation/bodyGoal';
 import entriesRouter from './bodyGoalEntries';
 
@@ -14,10 +15,22 @@ router.use(requireAuth);
 // framing), so this is a generous ceiling, not a realistic usage cap.
 const MAX_GOALS = 50;
 
+// See exercicios.ts for why the default limit equals the resource's own hard cap. `createdAt`'s
+// cursor value round-trips through JSON as an ISO string, so it needs `parse` to become a real
+// `Date` again before Mongo compares it against the `Date`-typed field.
+const GOALS_SORT: SortSpec[] = [
+  { field: 'createdAt', direction: -1, parse: (raw) => new Date(raw as string) },
+  { field: '_id', direction: 1 },
+];
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const goals = await BodyGoal.find({ userId: req.user!.id }).sort({ createdAt: -1 });
+    const limit = parseLimit(req.query.limit, MAX_GOALS);
+    const { items: goals, nextCursor } = await paginateFind(BodyGoal, { userId: req.user!.id }, GOALS_SORT, {
+      cursor: req.query.cursor,
+      limit,
+    });
 
     // N+1 is fine here — a user has a handful of goals over years, not hundreds. Each goal gets
     // its own "latest weight logged" so the list can show progress at a glance without opening it.
@@ -32,7 +45,7 @@ router.get(
       })
     );
 
-    res.status(200).json({ goals: goalsWithSummary });
+    res.status(200).json({ goals: goalsWithSummary, nextCursor });
   })
 );
 

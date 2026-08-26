@@ -71,6 +71,37 @@ router.post(
   })
 );
 
+const moveSessaoSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+});
+
+router.patch(
+  '/:id/date',
+  asyncHandler(async (req, res) => {
+    const { date } = moveSessaoSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    try {
+      const sessao = await Sessao.findOneAndUpdate(
+        { _id: req.params.id, userId },
+        { $set: { date, updatedAt: new Date() } },
+        { new: true }
+      );
+      if (!sessao) {
+        res.status(404).json({ error: 'Sessão não encontrada' });
+        return;
+      }
+      res.status(200).json({ sessao });
+    } catch (error: unknown) {
+      if ((error as { code?: number })?.code === 11000) {
+        res.status(409).json({ error: 'Já existe uma sessão desse treino nesse dia.' });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {

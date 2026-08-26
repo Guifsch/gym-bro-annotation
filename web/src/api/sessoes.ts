@@ -24,6 +24,14 @@ export async function createSessaoDia(params: { treinoId: string; date: string }
   return sessao
 }
 
+export async function moveSessaoDate(id: string, date: string): Promise<Sessao> {
+  const { sessao } = await apiRequest<{ sessao: Sessao }>(`/api/sessoes/${id}/date`, {
+    method: 'PATCH',
+    body: { date },
+  })
+  return sessao
+}
+
 export async function getSessao(id: string): Promise<Sessao> {
   const { sessao } = await apiRequest<{ sessao: Sessao }>(`/api/sessoes/${id}`)
   return sessao

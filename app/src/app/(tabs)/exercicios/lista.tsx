@@ -13,7 +13,7 @@ import {
   deleteExercicioCapa,
   deleteExercicioImagem,
   listCategorias,
-  listExercicios,
+  listExerciciosPage,
   updateExercicio,
   uploadExercicioCapa,
   uploadExercicioImagem,
@@ -27,9 +27,11 @@ import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
+import { FIXED_BOTTOM_BAR_SPACE, FixedBottomBar } from '@/components/fixed-bottom-bar';
 import { GradientButton } from '@/components/gradient-button';
 import { InlineLogEditor } from '@/components/inline-log-editor';
 import { LabeledTextField } from '@/components/labeled-text-field';
+import { ListFooterSpinner } from '@/components/list-footer-spinner';
 import { PercentualTable } from '@/components/percentual-table';
 import { SubstitutoPicker } from '@/components/substituto-picker';
 import { SwipeableRow } from '@/components/swipeable-row';
@@ -38,6 +40,7 @@ import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { usePaginatedList } from '@/hooks/use-paginated-list';
 import { useTheme } from '@/hooks/use-theme';
 import type { Categoria, Exercicio, LogFields } from '@/types/workout';
 
@@ -49,9 +52,16 @@ interface CategoriaSection {
 
 export default function ExerciciosListaScreen() {
   const theme = useTheme();
-  const [exercicios, setExercicios] = useState<Exercicio[]>([]);
+  const {
+    items: exercicios,
+    setItems: setExercicios,
+    loading,
+    loadingMore,
+    hasMore,
+    reload,
+    loadMore,
+  } = usePaginatedList(listExerciciosPage);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -71,21 +81,15 @@ export default function ExerciciosListaScreen() {
   const [stagedImagens, setStagedImagens] = useState<{ uri: string; contentType: string }[]>([]);
   const [stagedVideoUrls, setStagedVideoUrls] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [exerciciosData, categoriasData] = await Promise.all([listExercicios(), listCategorias()]);
-      setExercicios(exerciciosData);
-      setCategorias(categoriasData);
-    } finally {
-      setLoading(false);
-    }
+  const loadCategorias = useCallback(async () => {
+    setCategorias(await listCategorias());
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      reload();
+      loadCategorias();
+    }, [reload, loadCategorias])
   );
 
   useFocusEffect(
@@ -424,9 +428,10 @@ export default function ExerciciosListaScreen() {
         )}
 
         {creating || editingId ? (
+          <>
           <ScrollView
             ref={formScrollViewRef}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={styles.formScrollContent}
             showsVerticalScrollIndicator={false}>
           {(creating || editingExercicio) && (
             <ExercicioCoverPhoto
@@ -548,40 +553,41 @@ export default function ExerciciosListaScreen() {
               onChange={setSubstitutoIds}
             />
 
-            <View style={styles.actionsColumn}>
-              <GradientButton
-                title={editingId ? 'Salvar alterações' : 'Criar exercício'}
-                onPress={handleSave}
-                loading={saving}
-                disabled={!canSave}
-              />
-              <View style={styles.secondaryRow}>
-                {editingId && (
-                  <Pressable onPress={() => setHistoricoVisible(true)} hitSlop={8} style={styles.secondaryButton}>
-                    <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
-                    <ThemedText type="small" themeColor="textSecondary">
-                      Histórico
-                    </ThemedText>
-                  </Pressable>
-                )}
-                {editingId && (
-                  <Pressable onPress={handleClone} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
-                    <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
-                    <ThemedText type="small" themeColor="textSecondary">
-                      Clonar
-                    </ThemedText>
-                  </Pressable>
-                )}
-                <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
-                  <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
+            <View style={styles.secondaryRow}>
+              {editingId && (
+                <Pressable onPress={() => setHistoricoVisible(true)} hitSlop={8} style={styles.secondaryButton}>
+                  <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
                   <ThemedText type="small" themeColor="textSecondary">
-                    Cancelar
+                    Histórico
                   </ThemedText>
                 </Pressable>
-              </View>
+              )}
+              {editingId && (
+                <Pressable onPress={handleClone} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
+                  <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Clonar
+                  </ThemedText>
+                </Pressable>
+              )}
+              <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
+                <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
+                <ThemedText type="small" themeColor="textSecondary">
+                  Cancelar
+                </ThemedText>
+              </Pressable>
             </View>
           </Card>
           </ScrollView>
+          <FixedBottomBar>
+            <GradientButton
+              title={editingId ? 'Salvar alterações' : 'Criar exercício'}
+              onPress={handleSave}
+              loading={saving}
+              disabled={!canSave}
+            />
+          </FixedBottomBar>
+          </>
         ) : !loading && exercicios.length === 0 ? (
           <View style={styles.scrollContent}>
             <GradientButton
@@ -600,6 +606,8 @@ export default function ExerciciosListaScreen() {
             initialNumToRender={100}
             contentContainerStyle={styles.sectionContent}
             showsVerticalScrollIndicator={false}
+            onEndReachedThreshold={0.4}
+            onEndReached={hasMore ? loadMore : undefined}
             ListHeaderComponent={
               <GradientButton
                 title="Criar exercício"
@@ -608,6 +616,7 @@ export default function ExerciciosListaScreen() {
               />
             }
             ListHeaderComponentStyle={styles.createButtonHeader}
+            ListFooterComponent={<ListFooterSpinner visible={loadingMore} />}
             renderSectionHeader={({ section }) => (
               <View
                 ref={(el) => {
@@ -682,6 +691,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
+  formScrollContent: { gap: Spacing.three, paddingBottom: FIXED_BOTTOM_BAR_SPACE },
   formCard: { gap: Spacing.two },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   photoSection: { gap: Spacing.two },
@@ -690,7 +700,6 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   chip: { borderWidth: 1, borderRadius: Radius.full, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   chipTextActive: { color: '#fff', fontWeight: '700' },
-  actionsColumn: { gap: Spacing.two, marginTop: Spacing.one },
   secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.five },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, padding: Spacing.one },
   sectionContent: { paddingBottom: Spacing.five },

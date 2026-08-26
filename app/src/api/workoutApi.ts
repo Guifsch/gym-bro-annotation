@@ -17,9 +17,35 @@ import type {
 
 import { API_URL, apiClient } from './apiClient';
 
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export interface PageParams {
+  /** `null`/`undefined` fetches the first page. */
+  cursor?: string | null;
+  limit: number;
+}
+
+/** Every `GET /` list endpoint defaults `limit` to the resource's own hard cap when it's omitted,
+ * so the plain `listX()` functions below (used by pickers/forms that want everything at once) keep
+ * working unpaginated — only the `listXPage()` variants, used by infinite-scroll listing screens,
+ * pass an explicit `limit` to actually paginate. */
+function pageQuery({ cursor, limit }: PageParams): Record<string, string> {
+  const query: Record<string, string> = { limit: String(limit) };
+  if (cursor) query.cursor = cursor;
+  return query;
+}
+
 export async function listCategorias(): Promise<Categoria[]> {
   const { data } = await apiClient.get('/api/categorias');
   return data.categorias;
+}
+
+export async function listCategoriasPage(params: PageParams): Promise<Page<Categoria>> {
+  const { data } = await apiClient.get('/api/categorias', { params: pageQuery(params) });
+  return { items: data.categorias, nextCursor: data.nextCursor };
 }
 
 export async function createCategoria(params: { id: string; nome: string }): Promise<Categoria> {
@@ -39,6 +65,11 @@ export async function deleteCategoria(id: string): Promise<void> {
 export async function listExercicios(): Promise<Exercicio[]> {
   const { data } = await apiClient.get('/api/exercicios');
   return data.exercicios;
+}
+
+export async function listExerciciosPage(params: PageParams): Promise<Page<Exercicio>> {
+  const { data } = await apiClient.get('/api/exercicios', { params: pageQuery(params) });
+  return { items: data.exercicios, nextCursor: data.nextCursor };
 }
 
 export interface CreateExercicioParams {
@@ -136,6 +167,11 @@ export async function cloneExercicio(id: string): Promise<Exercicio> {
 export async function listTreinos(): Promise<Treino[]> {
   const { data } = await apiClient.get('/api/treinos');
   return data.treinos;
+}
+
+export async function listTreinosPage(params: PageParams): Promise<Page<Treino>> {
+  const { data } = await apiClient.get('/api/treinos', { params: pageQuery(params) });
+  return { items: data.treinos, nextCursor: data.nextCursor };
 }
 
 export async function createTreino(params: { id: string; nome: string }): Promise<Treino> {
@@ -263,6 +299,11 @@ export async function listRefeicoes(): Promise<Refeicao[]> {
   return data.refeicoes;
 }
 
+export async function listRefeicoesPage(params: PageParams): Promise<Page<Refeicao>> {
+  const { data } = await apiClient.get('/api/refeicoes', { params: pageQuery(params) });
+  return { items: data.refeicoes, nextCursor: data.nextCursor };
+}
+
 export async function createRefeicao(params: CreateRefeicaoParams): Promise<Refeicao> {
   const { data } = await apiClient.post('/api/refeicoes', params);
   return data.refeicao;
@@ -325,6 +366,11 @@ export interface UpdateBodyGoalParams {
 export async function listBodyGoals(): Promise<BodyGoalSummary[]> {
   const { data } = await apiClient.get('/api/body-goals');
   return data.goals;
+}
+
+export async function listBodyGoalsPage(params: PageParams): Promise<Page<BodyGoalSummary>> {
+  const { data } = await apiClient.get('/api/body-goals', { params: pageQuery(params) });
+  return { items: data.goals, nextCursor: data.nextCursor };
 }
 
 export async function createBodyGoal(params: CreateBodyGoalParams): Promise<BodyGoal> {

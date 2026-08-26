@@ -15,6 +15,7 @@ import {
   updateExercicio,
   uploadExercicioCapa,
   uploadExercicioImagem,
+  type UpdateExercicioParams,
   type UpsertEntryParams,
 } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
@@ -23,6 +24,8 @@ import { EmptyState } from '@/components/empty-state';
 import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
 import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
+import { FIXED_BOTTOM_BAR_SPACE, FixedBottomBar } from '@/components/fixed-bottom-bar';
+import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { LoadingView } from '@/components/loading-view';
 import { PercentualTable } from '@/components/percentual-table';
@@ -57,6 +60,7 @@ export default function ExercicioDetalheScreen() {
   const [notFound, setNotFound] = useState(false);
   const [historicoVisible, setHistoricoVisible] = useState(false);
   const [cloning, setCloning] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const [sessaoData, exerciciosData, categoriasData] = await Promise.all([
@@ -110,109 +114,72 @@ export default function ExercicioDetalheScreen() {
     );
   }
 
-  async function handleSaveNome() {
-    const trimmed = nome.trim();
-    if (!trimmed || !exercicio || trimmed === exercicio.nome) return;
-    try {
-      const updated = await updateExercicio(exercicio._id, { nome: trimmed });
-      setExercicio(updated);
-      showToast('Nome atualizado');
-    } catch (err) {
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+  function arraysEqualAsSets(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const setB = new Set(b);
+    return a.every((id) => setB.has(id));
   }
 
-  async function handleSaveDescricao() {
-    const trimmed = descricao.trim();
-    if (!exercicio || trimmed === (exercicio.descricao ?? '')) return;
-    try {
-      const updated = await updateExercicio(exercicio._id, { descricao: trimmed });
-      setExercicio(updated);
-      showToast('Descrição atualizada');
-    } catch (err) {
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
-  }
-
-  async function handleSaveCargaMaxima() {
-    if (!exercicio) return;
-    const trimmed = cargaMaximaText.trim();
-    const parsed = trimmed ? Number(trimmed.replace(',', '.')) : undefined;
-    if (trimmed && !Number.isFinite(parsed)) return;
-    if (parsed === exercicio.cargaMaximaKg) return;
-    try {
-      const updated = await updateExercicio(exercicio._id, { cargaMaximaKg: parsed });
-      setExercicio(updated);
-      showToast('Carga máxima atualizada');
-    } catch (err) {
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
-  }
-
-  function handleSaveFields(fields: LogFields) {
-    if (!sessao || !exercicio || Object.keys(fields).length === 0) return;
-
-    const params: UpsertEntryParams = { sessaoId: sessao._id, exercicioId: exercicio._id, ...fields };
-    setSessao((current) => (current ? mergeSessaoEntry(current, exercicio, params) : current));
-    void enqueueUpsertSessaoEntry(params);
-    showToast('Salvo');
-  }
-
-  function handleSaveSets() {
+  // Nome/Descrição/Carga máxima/Categoria/Substitutos/Sets/Reps/Peso all used to save individually
+  // (some on blur, some the moment a chip/picker changed) — but blur also fires when a field loses
+  // focus because the screen is navigating away (e.g. the hardware back button), and racing that
+  // against unmount was the root cause of a real stuck-loading bug. One explicit button that saves
+  // only whatever actually changed avoids that race entirely, same as the Exercícios tab's form.
+  // Fotos/Vídeos/Capa stay immediate — they're file uploads, not something to stage locally.
+  async function handleSave() {
     if (!exercicio || !sessao) return;
-    const trimmed = setsText.trim();
-    const parsed = trimmed ? Math.round(Number(trimmed)) : NaN;
-    if (!Number.isFinite(parsed) || parsed <= 0) return;
-    const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
-    if (parsed === (entry?.sets ?? exercicio.sets)) return;
-    handleSaveFields({ sets: parsed });
-  }
 
-  function handleSaveReps() {
-    if (!exercicio || !sessao) return;
-    const trimmed = repsText.trim();
-    const parsed = trimmed ? Math.round(Number(trimmed)) : NaN;
-    if (!Number.isFinite(parsed) || parsed <= 0) return;
-    const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
-    if (parsed === (entry?.reps ?? exercicio.reps)) return;
-    handleSaveFields({ reps: parsed });
-  }
+    const trimmedNome = nome.trim();
+    if (!trimmedNome) return;
 
-  function handleSavePeso() {
-    if (!exercicio || !sessao) return;
-    const trimmed = pesoText.trim();
-    const parsed = trimmed ? Number(trimmed.replace(',', '.')) : NaN;
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-    const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
-    if (parsed === (entry?.pesoKg ?? exercicio.pesoKg)) return;
-    handleSaveFields({ pesoKg: parsed });
-  }
+    const trimmedCarga = cargaMaximaText.trim();
+    const parsedCarga = trimmedCarga ? Number(trimmedCarga.replace(',', '.')) : undefined;
+    if (trimmedCarga && !Number.isFinite(parsedCarga)) return;
 
-  async function handleChangeCategoria(newCategoriaId: string) {
-    if (!exercicio || newCategoriaId === categoriaId) return;
-    const previous = categoriaId;
-    setCategoriaId(newCategoriaId);
+    const trimmedSets = setsText.trim();
+    const parsedSets = trimmedSets ? Math.round(Number(trimmedSets)) : NaN;
+    const trimmedReps = repsText.trim();
+    const parsedReps = trimmedReps ? Math.round(Number(trimmedReps)) : NaN;
+    const trimmedPeso = pesoText.trim();
+    const parsedPeso = trimmedPeso ? Number(trimmedPeso.replace(',', '.')) : NaN;
+    if (!Number.isFinite(parsedSets) || parsedSets <= 0) return;
+    if (!Number.isFinite(parsedReps) || parsedReps <= 0) return;
+    if (!Number.isFinite(parsedPeso) || parsedPeso < 0) return;
+
+    const exercicioUpdates: UpdateExercicioParams = {};
+    if (trimmedNome !== exercicio.nome) exercicioUpdates.nome = trimmedNome;
+    if (descricao.trim() !== (exercicio.descricao ?? '')) exercicioUpdates.descricao = descricao.trim();
+    if (parsedCarga !== exercicio.cargaMaximaKg) exercicioUpdates.cargaMaximaKg = parsedCarga;
+    if (categoriaId && categoriaId !== exercicio.categoriaId) exercicioUpdates.categoriaId = categoriaId;
+    if (!arraysEqualAsSets(substitutoIds, exercicio.substitutoIds)) exercicioUpdates.substitutoIds = substitutoIds;
+
+    const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
+    const sessaoFields: LogFields = {};
+    if (parsedSets !== (entry?.sets ?? exercicio.sets)) sessaoFields.sets = parsedSets;
+    if (parsedReps !== (entry?.reps ?? exercicio.reps)) sessaoFields.reps = parsedReps;
+    if (parsedPeso !== (entry?.pesoKg ?? exercicio.pesoKg)) sessaoFields.pesoKg = parsedPeso;
+
+    const hasExercicioUpdates = Object.keys(exercicioUpdates).length > 0;
+    const hasSessaoFields = Object.keys(sessaoFields).length > 0;
+    if (!hasExercicioUpdates && !hasSessaoFields) return;
+
+    setSaving(true);
     try {
-      const updated = await updateExercicio(exercicio._id, { categoriaId: newCategoriaId });
-      setExercicio(updated);
-      showToast('Categoria atualizada');
+      let currentExercicio = exercicio;
+      if (hasExercicioUpdates) {
+        currentExercicio = await updateExercicio(exercicio._id, exercicioUpdates);
+        setExercicio(currentExercicio);
+      }
+      if (hasSessaoFields) {
+        const params: UpsertEntryParams = { sessaoId: sessao._id, exercicioId: exercicio._id, ...sessaoFields };
+        setSessao((current) => (current ? mergeSessaoEntry(current, currentExercicio, params) : current));
+        void enqueueUpsertSessaoEntry(params);
+      }
+      showToast('Salvo');
     } catch (err) {
-      setCategoriaId(previous);
       Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
-  }
-
-  async function handleChangeSubstitutos(ids: string[]) {
-    if (!exercicio) return;
-    const previous = substitutoIds;
-    setSubstitutoIds(ids);
-    try {
-      const updated = await updateExercicio(exercicio._id, { substitutoIds: ids });
-      setExercicio(updated);
-      showToast('Substitutos atualizados');
-    } catch (err) {
-      setSubstitutoIds(previous);
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -316,12 +283,11 @@ export default function ExercicioDetalheScreen() {
           <ExercicioCoverPhoto capa={exercicio.capa} onUpload={handleUploadCapa} onDelete={handleDeleteCapa} />
 
           <Card style={styles.formCard}>
-            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} onBlur={handleSaveNome} maxLength={50} />
+            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
             <LabeledTextField
               label="Descrição (opcional)"
               value={descricao}
               onChangeText={setDescricao}
-              onBlur={handleSaveDescricao}
               maxLength={200}
               multiline
               numberOfLines={3}
@@ -332,7 +298,6 @@ export default function ExercicioDetalheScreen() {
               label="Carga máxima (1RM, opcional)"
               value={cargaMaximaText}
               onChangeText={setCargaMaximaText}
-              onBlur={handleSaveCargaMaxima}
               keyboardType="decimal-pad"
               maxLength={7}
             />
@@ -346,7 +311,6 @@ export default function ExercicioDetalheScreen() {
                   label="Sets"
                   value={setsText}
                   onChangeText={setSetsText}
-                  onBlur={handleSaveSets}
                   keyboardType="number-pad"
                   maxLength={2}
                 />
@@ -356,7 +320,6 @@ export default function ExercicioDetalheScreen() {
                   label="Repetições"
                   value={repsText}
                   onChangeText={setRepsText}
-                  onBlur={handleSaveReps}
                   keyboardType="number-pad"
                   maxLength={3}
                 />
@@ -366,7 +329,6 @@ export default function ExercicioDetalheScreen() {
                   label="Peso (kg)"
                   value={pesoText}
                   onChangeText={setPesoText}
-                  onBlur={handleSavePeso}
                   keyboardType="decimal-pad"
                   maxLength={7}
                 />
@@ -393,7 +355,7 @@ export default function ExercicioDetalheScreen() {
                 return (
                   <Pressable
                     key={categoria._id}
-                    onPress={() => handleChangeCategoria(categoria._id)}
+                    onPress={() => setCategoriaId(categoria._id)}
                     style={[
                       styles.chip,
                       { borderColor: selected ? Brand.primary : theme.border },
@@ -417,7 +379,7 @@ export default function ExercicioDetalheScreen() {
               exercicios={exercicios.filter((e) => e._id !== exercicio._id)}
               categoriaNomeById={categoriaNomeById}
               selectedIds={substitutoIds}
-              onChange={handleChangeSubstitutos}
+              onChange={setSubstitutoIds}
             />
 
             <View style={styles.secondaryRow}>
@@ -438,6 +400,10 @@ export default function ExercicioDetalheScreen() {
         </ScrollView>
       </SafeAreaView>
 
+      <FixedBottomBar>
+        <GradientButton title="Salvar alterações" onPress={handleSave} loading={saving} />
+      </FixedBottomBar>
+
       <ExercicioHistoricoModal
         visible={historicoVisible}
         exercicioId={exercicio._id}
@@ -450,7 +416,7 @@ export default function ExercicioDetalheScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
-  scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
+  scrollContent: { gap: Spacing.three, paddingBottom: FIXED_BOTTOM_BAR_SPACE },
   formCard: { gap: Spacing.two },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   photoSection: { gap: Spacing.two },

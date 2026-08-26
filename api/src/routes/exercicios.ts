@@ -8,6 +8,7 @@ import { Exercicio } from '../models/Exercicio';
 import { Treino } from '../models/Treino';
 import { asyncHandler } from '../utils/asyncHandler';
 import { detectImageContentType } from '../utils/imageValidation';
+import { paginateFind, parseLimit, type SortSpec } from '../utils/pagination';
 import { deleteImageFromR2, uploadImageToR2 } from '../utils/storage';
 import { createExercicioSchema, reorderExercicioSchema, updateExercicioSchema } from '../validation/workout';
 
@@ -16,6 +17,16 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_EXERCICIOS = 100;
 const CAPA_THUMB_MAX_SIZE = 300;
 const CAPA_THUMB_QUALITY = 82;
+
+// Default limit == MAX_EXERCICIOS so call sites that never pass `limit`/`cursor` (pickers like the
+// treino editor's exercise checklist, substituto picker, category chips) keep getting every row in
+// one page, exactly like before pagination existed. Only the Exercícios tab's listing screen
+// explicitly passes a smaller `limit` to actually paginate.
+const EXERCICIOS_SORT: SortSpec[] = [
+  { field: 'ordem', direction: 1 },
+  { field: 'nome', direction: 1 },
+  { field: '_id', direction: 1 },
+];
 
 const router = Router();
 router.use(requireAuth);
@@ -72,8 +83,14 @@ async function syncReciprocalSubstitutos(
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const exercicios = await Exercicio.find({ userId: req.user!.id }).select('-historico').sort({ ordem: 1, nome: 1 });
-    res.status(200).json({ exercicios });
+    const limit = parseLimit(req.query.limit, MAX_EXERCICIOS);
+    const { items: exercicios, nextCursor } = await paginateFind(
+      Exercicio,
+      { userId: req.user!.id },
+      EXERCICIOS_SORT,
+      { cursor: req.query.cursor, limit, select: '-historico' }
+    );
+    res.status(200).json({ exercicios, nextCursor });
   })
 );
 
