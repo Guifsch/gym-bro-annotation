@@ -1,23 +1,14 @@
 import { Schema, model } from 'mongoose';
 
-const entrySchema = new Schema(
-  {
-    _id: { type: String },
-    exercicioId: { type: String, ref: 'Exercicio', required: true },
-    sets: { type: Number, min: 1, max: 50 },
-    reps: { type: Number, min: 1, max: 500 },
-    pesoKg: { type: Number, min: 0, max: 1000 },
-    updatedAt: { type: Date, default: Date.now },
-  },
-  { _id: false }
-);
-
+// `entries[]` (per-session sets/reps/pesoKg overrides) existed here until ago/2026 — removed in
+// favor of a single source of truth (`Exercicio.sets/reps/pesoKg`, see exercicios.ts) updated
+// directly, with every real change logged to `Exercicio.historico[]`. A `Sessao` now only marks
+// "this treino happened on this date" — it doesn't carry its own performance data anymore.
 const sessaoSchema = new Schema({
   _id: { type: String },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   treinoId: { type: String, ref: 'Treino', required: true },
   date: { type: String, required: true },
-  entries: { type: [entrySchema], default: [] },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

@@ -4,23 +4,25 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { type UpsertEntryParams, getSessao, getTreino, listCategorias, listExercicios } from '@/api/workoutApi';
+import { getSessao, getTreino, listCategorias, listExercicios } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
+import { HeaderSearchField } from '@/components/header-search-field';
 import { InlineLogEditor } from '@/components/inline-log-editor';
 import { LoadingView } from '@/components/loading-view';
+import { SortMenuButton } from '@/components/sort-menu-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { mergeSessaoEntry } from '@/offline/mergeSessaoEntry';
-import { enqueueUpsertSessaoEntry } from '@/offline/queue';
+import { enqueueUpdateExercicio } from '@/offline/queue';
 import type { Categoria, Exercicio, LogFields, Sessao, Treino } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
+import { LIST_SORT_OPTIONS, matchesSearch, sortByNome, type ListSortBy } from '@/utils/listSort';
 
 const PAGE_SIZE = 30;
 
@@ -44,6 +46,9 @@ export default function SessaoDetalheScreen() {
   // this just reveals them into the SectionList 30 at a time on scroll, matching the infinite-scroll
   // UX used elsewhere, instead of paginating a network call that isn't actually needed here.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>('ordem');
 
   const load = useCallback(async () => {
     const sessaoData = await getSessao(sessaoId);
@@ -62,7 +67,11 @@ export default function SessaoDetalheScreen() {
     useCallback(() => {
       setLoading(true);
       setNotFound(false);
-      setVisibleCount(PAGE_SIZE);
+      // Not resetting `visibleCount` here on purpose: this refetch also runs when returning from
+      // viewing/editing an exercise (to pick up any change), and resetting it back to `PAGE_SIZE`
+      // would cut the revealed list back down below however far the user had actually scrolled,
+      // losing their scroll position. It still starts fresh at `PAGE_SIZE` on a genuine first visit
+      // to a session, since that comes from the `useState` initializer, not from here.
       load()
         .catch(() => setNotFound(true))
         .finally(() => setLoading(false));
@@ -101,11 +110,19 @@ export default function SessaoDetalheScreen() {
   const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
   const headerRefs = useRef<Record<string, View | null>>({});
 
-  const visibleExercicioIds = useMemo(
-    () => treino?.exercicioIds.slice(0, visibleCount) ?? [],
-    [treino, visibleCount]
+  const filteredSortedExercicios = useMemo(() => {
+    const resolved = (treino?.exercicioIds ?? [])
+      .map((id) => exercicioById[id])
+      .filter((e): e is Exercicio => Boolean(e))
+      .filter((e) => matchesSearch(e.nome, search));
+    return sortByNome(resolved, sortBy, (e) => e.nome);
+  }, [treino, exercicioById, search, sortBy]);
+
+  const visibleExercicios = useMemo(
+    () => filteredSortedExercicios.slice(0, visibleCount),
+    [filteredSortedExercicios, visibleCount]
   );
-  const hasMore = (treino?.exercicioIds.length ?? 0) > visibleExercicioIds.length;
+  const hasMore = filteredSortedExercicios.length > visibleExercicios.length;
 
   function loadMore() {
     setVisibleCount((count) => count + PAGE_SIZE);
@@ -113,9 +130,7 @@ export default function SessaoDetalheScreen() {
 
   const gruposPorCategoria = useMemo(() => {
     const map = new Map<string, Exercicio[]>();
-    for (const exercicioId of visibleExercicioIds) {
-      const exercicio = exercicioById[exercicioId];
-      if (!exercicio) continue;
+    for (const exercicio of visibleExercicios) {
       const arr = map.get(exercicio.categoriaId) ?? [];
       arr.push(exercicio);
       map.set(exercicio.categoriaId, arr);
@@ -125,7 +140,7 @@ export default function SessaoDetalheScreen() {
       nome: categoriaNomeById[categoriaId] ?? 'Categoria removida',
       exercicios: exerciciosDaCategoria,
     }));
-  }, [visibleExercicioIds, exercicioById, categoriaNomeById]);
+  }, [visibleExercicios, categoriaNomeById]);
 
   const sections = useMemo<CategoriaSection[]>(
     () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
@@ -149,12 +164,10 @@ export default function SessaoDetalheScreen() {
     );
   }
 
-  function handleSaveFields(exercicio: Exercicio, fields: LogFields) {
-    if (!sessao || Object.keys(fields).length === 0) return;
-
-    const params: UpsertEntryParams = { sessaoId: sessao._id, exercicioId: exercicio._id, ...fields };
-    setSessao((current) => (current ? mergeSessaoEntry(current, exercicio, params) : current));
-    void enqueueUpsertSessaoEntry(params);
+  function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
+    if (Object.keys(fields).length === 0) return;
+    setExercicios((prev) => prev.map((e) => (e._id === exercicio._id ? { ...e, ...fields } : e)));
+    void enqueueUpdateExercicio({ exercicioId: exercicio._id, fields });
   }
 
   if (notFound) {
@@ -186,12 +199,42 @@ export default function SessaoDetalheScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <BackHeader title={treino.nome} subtitle={formatDateDisplay(date)} />
+        <BackHeader
+          title={treino.nome}
+          subtitle={formatDateDisplay(date)}
+          titleSlot={
+            searchOpen ? (
+              <HeaderSearchField value={search} onChangeText={setSearch} placeholder="Buscar exercício..." />
+            ) : undefined
+          }
+          rightActions={
+            treino.exercicioIds.length === 0 ? undefined : searchOpen ? (
+              <Pressable
+                onPress={() => {
+                  setSearchOpen(false);
+                  setSearch('');
+                }}
+                hitSlop={10}
+                style={styles.headerIconButton}>
+                <Ionicons name="close" size={20} color={theme.text} />
+              </Pressable>
+            ) : (
+              <View style={styles.headerActionsRow}>
+                <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.headerIconButton}>
+                  <Ionicons name="search" size={20} color={theme.text} />
+                </Pressable>
+                <SortMenuButton value={sortBy} options={LIST_SORT_OPTIONS} onChange={setSortBy} />
+              </View>
+            )
+          }
+        />
 
-        {gruposPorCategoria.length === 0 ? (
+        {treino.exercicioIds.length === 0 ? (
           <ThemedText type="small">
             Este treino não tem exercícios vinculados ainda (edite em Exercícios &gt; Treinos).
           </ThemedText>
+        ) : gruposPorCategoria.length === 0 ? (
+          <EmptyState icon="search-outline" title="Nenhum exercício encontrado." />
         ) : (
           <>
             <CategoryJumpBar
@@ -224,10 +267,7 @@ export default function SessaoDetalheScreen() {
                 </View>
               )}
               renderItem={({ item: exercicio, index, section }) => {
-                const entry = sessao.entries.find((e) => e.exercicioId === exercicio._id);
-                const sets = entry?.sets ?? exercicio.sets;
-                const reps = entry?.reps ?? exercicio.reps;
-                const pesoKg = entry?.pesoKg ?? exercicio.pesoKg;
+                const { sets, reps, pesoKg } = exercicio;
                 const isLastInSection = index === section.data.length - 1;
                 return (
                   <View style={[styles.exercicioWrap, isLastInSection && styles.exercicioWrapLastInSection]}>
@@ -262,7 +302,7 @@ export default function SessaoDetalheScreen() {
                       sets={sets}
                       reps={reps}
                       pesoKg={pesoKg}
-                      onSaveFields={(fields) => handleSaveFields(exercicio, fields)}
+                      onSaveFields={(fields) => handleQuickUpdate(exercicio, fields)}
                     />
                   </View>
                 );
@@ -279,6 +319,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   scrollContent: { paddingBottom: Spacing.five },
+  headerActionsRow: { flexDirection: 'row', alignItems: 'center' },
+  headerIconButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   grupoHeader: {
     flexDirection: 'row',
     alignItems: 'center',

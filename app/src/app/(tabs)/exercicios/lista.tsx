@@ -1,40 +1,30 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Pressable, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getApiErrorMessage } from '@/api/apiClient';
-import {
-  cloneExercicio,
-  createExercicio,
-  deleteExercicio,
-  deleteExercicioCapa,
-  deleteExercicioImagem,
-  listCategorias,
-  listExerciciosPage,
-  updateExercicio,
-  uploadExercicioCapa,
-  uploadExercicioImagem,
-} from '@/api/workoutApi';
+import { createExercicio, deleteExercicio, listCategorias, listExerciciosPage, uploadExercicioCapa, uploadExercicioImagem } from '@/api/workoutApi';
 import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { CategoryIcon } from '@/components/category-icon';
 import { CategoryJumpBar } from '@/components/category-jump-bar';
 import { EmptyState } from '@/components/empty-state';
 import { ExercicioCoverPhoto } from '@/components/exercicio-cover-photo';
-import { ExercicioHistoricoModal } from '@/components/exercicio-historico-modal';
+import { ExercicioEditForm, type ExercicioEditFormHandle } from '@/components/exercicio-edit-form';
 import { ExercicioImageGallery } from '@/components/exercicio-image-gallery';
 import { ExercicioThumbnail } from '@/components/exercicio-thumbnail';
 import { FIXED_BOTTOM_BAR_SPACE, FixedBottomBar } from '@/components/fixed-bottom-bar';
 import { GradientButton } from '@/components/gradient-button';
+import { HeaderSearchField } from '@/components/header-search-field';
 import { InlineLogEditor } from '@/components/inline-log-editor';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { ListFooterSpinner } from '@/components/list-footer-spinner';
 import { PercentualTable } from '@/components/percentual-table';
+import { SortMenuButton } from '@/components/sort-menu-button';
 import { SubstitutoPicker } from '@/components/substituto-picker';
-import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
@@ -42,7 +32,9 @@ import { VideoLinkGallery } from '@/components/video-link-gallery';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { usePaginatedList } from '@/hooks/use-paginated-list';
 import { useTheme } from '@/hooks/use-theme';
+import { enqueueUpdateExercicio } from '@/offline/queue';
 import type { Categoria, Exercicio, LogFields } from '@/types/workout';
+import { LIST_SORT_OPTIONS, matchesSearch, sortByNome, type ListSortBy } from '@/utils/listSort';
 
 interface CategoriaSection {
   categoriaId: string;
@@ -65,8 +57,9 @@ export default function ExerciciosListaScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const [historicoVisible, setHistoricoVisible] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>('ordem');
 
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -135,12 +128,31 @@ export default function ExerciciosListaScreen() {
   }, [exercicios]);
 
   const sectionListRef = useRef<SectionList<Exercicio, CategoriaSection>>(null);
+  // Tapping an item swaps the whole SectionList out for the edit form (see the `creating`/
+  // `editingId` branches below) — a real unmount, not just a re-render — so it comes back from
+  // zero on its own. Track the offset by hand and jump back to it once the list remounts.
+  const listScrollOffsetRef = useRef(0);
+
+  useEffect(() => {
+    if (creating || editingId) return;
+    const offset = listScrollOffsetRef.current;
+    if (offset <= 0) return;
+    requestAnimationFrame(() => {
+      sectionListRef.current?.getScrollResponder()?.scrollTo({ y: offset, animated: false });
+    });
+  }, [creating, editingId]);
   const headerRefs = useRef<Record<string, View | null>>({});
   const formScrollViewRef = useRef<ScrollView>(null);
+  const editFormRef = useRef<ExercicioEditFormHandle>(null);
+
+  const filteredExercicios = useMemo(
+    () => exercicios.filter((e) => matchesSearch(e.nome, search)),
+    [exercicios, search]
+  );
 
   const gruposPorCategoria = useMemo(() => {
     const map = new Map<string, Exercicio[]>();
-    for (const exercicio of exercicios) {
+    for (const exercicio of filteredExercicios) {
       const arr = map.get(exercicio.categoriaId) ?? [];
       arr.push(exercicio);
       map.set(exercicio.categoriaId, arr);
@@ -149,10 +161,10 @@ export default function ExerciciosListaScreen() {
       .map(([categoriaId, exerciciosDaCategoria]) => ({
         categoriaId,
         nome: categoriaNomeById[categoriaId] ?? 'Categoria removida',
-        exercicios: exerciciosDaCategoria,
+        exercicios: sortByNome(exerciciosDaCategoria, sortBy, (e) => e.nome),
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [exercicios, categoriaNomeById]);
+  }, [filteredExercicios, categoriaNomeById, sortBy]);
 
   const sections = useMemo<CategoriaSection[]>(
     () => gruposPorCategoria.map((grupo) => ({ categoriaId: grupo.categoriaId, nome: grupo.nome, data: grupo.exercicios })),
@@ -174,92 +186,31 @@ export default function ExerciciosListaScreen() {
     );
   }
 
+  // Only reachable while creating now (editing renders `ExercicioEditForm`, which owns its own
+  // immediate upload handlers) — so these just stage locally, no exercício id to upload against
+  // yet. `async` only to match the gallery components' `Promise<void>`-returning prop types.
   async function handleUploadImagem(uri: string, contentType: string) {
-    if (!editingId) {
-      setStagedImagens((prev) => (prev.length >= 5 ? prev : [...prev, { uri, contentType }]));
-      return;
-    }
-    try {
-      const updated = await uploadExercicioImagem(editingId, uri, contentType);
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Foto salva');
-    } catch (err) {
-      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+    setStagedImagens((prev) => (prev.length >= 5 ? prev : [...prev, { uri, contentType }]));
   }
 
   async function handleDeleteImagem(key: string) {
-    if (!editingId) {
-      setStagedImagens((prev) => prev.filter((s) => s.uri !== key));
-      return;
-    }
-    try {
-      const updated = await deleteExercicioImagem(editingId, key);
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Foto removida');
-    } catch {
-      Alert.alert('Não foi possível excluir', 'Tente novamente em instantes.');
-    }
+    setStagedImagens((prev) => prev.filter((s) => s.uri !== key));
   }
 
   async function handleUploadCapa(uri: string, contentType: string) {
-    if (!editingId) {
-      setStagedCapa({ uri, contentType });
-      return;
-    }
-    try {
-      const updated = await uploadExercicioCapa(editingId, uri, contentType);
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Capa salva');
-    } catch (err) {
-      Alert.alert('Não foi possível enviar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+    setStagedCapa({ uri, contentType });
   }
 
   async function handleDeleteCapa() {
-    if (!editingId) {
-      setStagedCapa(null);
-      return;
-    }
-    try {
-      const updated = await deleteExercicioCapa(editingId);
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Capa removida');
-    } catch {
-      Alert.alert('Não foi possível remover', 'Tente novamente em instantes.');
-    }
+    setStagedCapa(null);
   }
 
   async function handleAddVideo(url: string) {
-    if (!editingId) {
-      setStagedVideoUrls((prev) => [...prev, url]);
-      return;
-    }
-    if (!editingExercicio) return;
-    try {
-      const videoUrls = [...editingExercicio.videoUrls, url];
-      const updated = await updateExercicio(editingId, { videoUrls });
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Vídeo adicionado');
-    } catch (err) {
-      Alert.alert('Não foi possível adicionar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+    setStagedVideoUrls((prev) => [...prev, url]);
   }
 
   async function handleRemoveVideo(url: string) {
-    if (!editingId) {
-      setStagedVideoUrls((prev) => prev.filter((v) => v !== url));
-      return;
-    }
-    if (!editingExercicio) return;
-    try {
-      const videoUrls = editingExercicio.videoUrls.filter((v) => v !== url);
-      const updated = await updateExercicio(editingId, { videoUrls });
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      showToast('Vídeo removido');
-    } catch (err) {
-      Alert.alert('Não foi possível remover', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+    setStagedVideoUrls((prev) => prev.filter((v) => v !== url));
   }
 
   function resetForm() {
@@ -278,16 +229,10 @@ export default function ExerciciosListaScreen() {
     setStagedVideoUrls([]);
   }
 
+  // `ExercicioEditForm` initializes its own field state from the `exercicio` prop (remounted via
+  // `key={exercicio._id}`), so switching which one is being edited only needs the id updated here.
   function startEditing(exercicio: Exercicio) {
     setEditingId(exercicio._id);
-    setNome(exercicio.nome);
-    setDescricao(exercicio.descricao ?? '');
-    setSetsText(String(exercicio.sets));
-    setRepsText(String(exercicio.reps));
-    setPesoText(String(exercicio.pesoKg));
-    setCargaMaximaText(exercicio.cargaMaximaKg !== undefined ? String(exercicio.cargaMaximaKg) : '');
-    setCategoriaId(exercicio.categoriaId);
-    setSubstitutoIds(exercicio.substitutoIds);
   }
 
   function handleGoToSubstituto(id: string) {
@@ -297,16 +242,15 @@ export default function ExerciciosListaScreen() {
     formScrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }
 
-  async function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
-    try {
-      const updated = await updateExercicio(exercicio._id, fields);
-      setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-    } catch (err) {
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    }
+  // Offline-queued (same path the calendar's quick-edit row and exercise detail screen use) —
+  // sets/reps/kg are the fields most likely to be touched mid-workout with bad gym connectivity,
+  // so this applies instantly to the UI and syncs whenever a connection actually shows up.
+  function handleQuickUpdate(exercicio: Exercicio, fields: LogFields) {
+    setExercicios((prev) => prev.map((e) => (e._id === exercicio._id ? { ...e, ...fields } : e)));
+    void enqueueUpdateExercicio({ exercicioId: exercicio._id, fields });
   }
 
-  async function handleSave() {
+  async function handleCreate() {
     const parsedSets = Math.round(Number(setsText));
     const parsedReps = Math.round(Number(repsText));
     const parsedPeso = Number(pesoText.replace(',', '.'));
@@ -323,58 +267,46 @@ export default function ExerciciosListaScreen() {
 
     setSaving(true);
     try {
-      if (editingId) {
-        const updated = await updateExercicio(editingId, {
-          nome: nome.trim(),
-          descricao: descricao.trim(),
-          categoriaId,
-          sets: parsedSets,
-          reps: parsedReps,
-          pesoKg: parsedPeso,
-          cargaMaximaKg: parsedCargaMaxima,
-          substitutoIds,
-        });
-        setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
-      } else {
-        const created = await createExercicio({
-          id: Crypto.randomUUID(),
-          nome: nome.trim(),
-          descricao: descricao.trim(),
-          categoriaId,
-          sets: parsedSets,
-          reps: parsedReps,
-          pesoKg: parsedPeso,
-          cargaMaximaKg: parsedCargaMaxima,
-          videoUrls: stagedVideoUrls.length ? stagedVideoUrls : undefined,
-          substitutoIds,
-        });
-        setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
-        setCreating(false);
-        setEditingId(created._id);
+      const created = await createExercicio({
+        id: Crypto.randomUUID(),
+        nome: nome.trim(),
+        descricao: descricao.trim(),
+        categoriaId,
+        sets: parsedSets,
+        reps: parsedReps,
+        pesoKg: parsedPeso,
+        cargaMaximaKg: parsedCargaMaxima,
+        videoUrls: stagedVideoUrls.length ? stagedVideoUrls : undefined,
+        substitutoIds,
+      });
+      setExercicios((prev) => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setCreating(false);
+      // Transitions straight into editing the exercício just created (see `ExercicioEditForm`
+      // below) — lets the user immediately add a cover photo/gallery images without leaving the tela.
+      setEditingId(created._id);
 
-        let current = created;
-        try {
-          if (stagedCapa) {
-            current = await uploadExercicioCapa(current._id, stagedCapa.uri, stagedCapa.contentType);
-            setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
-          }
-          for (const imagem of stagedImagens) {
-            current = await uploadExercicioImagem(current._id, imagem.uri, imagem.contentType);
-            setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
-          }
-        } catch (err) {
-          Alert.alert(
-            'Exercício criado, mas houve um problema ao enviar as fotos',
-            getApiErrorMessage(err, 'Tente enviar novamente na edição.')
-          );
+      let current = created;
+      try {
+        if (stagedCapa) {
+          current = await uploadExercicioCapa(current._id, stagedCapa.uri, stagedCapa.contentType);
+          setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
         }
-        setStagedCapa(null);
-        setStagedImagens([]);
-        setStagedVideoUrls([]);
+        for (const imagem of stagedImagens) {
+          current = await uploadExercicioImagem(current._id, imagem.uri, imagem.contentType);
+          setExercicios((prev) => prev.map((e) => (e._id === current._id ? current : e)));
+        }
+      } catch (err) {
+        Alert.alert(
+          'Exercício criado, mas houve um problema ao enviar as fotos',
+          getApiErrorMessage(err, 'Tente enviar novamente na edição.')
+        );
       }
+      setStagedCapa(null);
+      setStagedImagens([]);
+      setStagedVideoUrls([]);
       showToast('Salvo');
     } catch (err) {
-      Alert.alert('Não foi possível salvar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
+      Alert.alert('Não foi possível criar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
     } finally {
       setSaving(false);
     }
@@ -398,27 +330,40 @@ export default function ExerciciosListaScreen() {
     ]);
   }
 
-  async function handleClone() {
-    if (!editingId) return;
-    setCloning(true);
-    try {
-      const clone = await cloneExercicio(editingId);
-      setExercicios((prev) => [...prev, clone].sort((a, b) => a.nome.localeCompare(b.nome)));
-      startEditing(clone);
-      showToast('Exercício clonado');
-    } catch (err) {
-      Alert.alert('Não foi possível clonar', getApiErrorMessage(err, 'Tente novamente em instantes.'));
-    } finally {
-      setCloning(false);
-    }
-  }
-
-  const canSave = Boolean(nome.trim() && setsText && repsText && pesoText);
+  const canCreate = Boolean(nome.trim() && setsText && repsText && pesoText);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <BackHeader title="Exercícios" onBack={creating || editingId ? resetForm : undefined} />
+        <BackHeader
+          title="Exercícios"
+          onBack={creating || editingId ? resetForm : undefined}
+          titleSlot={
+            !creating && !editingId && searchOpen ? (
+              <HeaderSearchField value={search} onChangeText={setSearch} placeholder="Buscar exercício..." />
+            ) : undefined
+          }
+          rightActions={
+            creating || editingId ? undefined : searchOpen ? (
+              <Pressable
+                onPress={() => {
+                  setSearchOpen(false);
+                  setSearch('');
+                }}
+                hitSlop={10}
+                style={styles.headerIconButton}>
+                <Ionicons name="close" size={20} color={theme.text} />
+              </Pressable>
+            ) : (
+              <View style={styles.headerActionsRow}>
+                <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.headerIconButton}>
+                  <Ionicons name="search" size={20} color={theme.text} />
+                </Pressable>
+                <SortMenuButton value={sortBy} options={LIST_SORT_OPTIONS} onChange={setSortBy} />
+              </View>
+            )
+          }
+        />
 
         {!creating && !editingId && gruposPorCategoria.length > 0 && (
           <CategoryJumpBar
@@ -427,166 +372,167 @@ export default function ExerciciosListaScreen() {
           />
         )}
 
-        {creating || editingId ? (
+        {creating ? (
           <>
-          <ScrollView
-            ref={formScrollViewRef}
-            contentContainerStyle={styles.formScrollContent}
-            showsVerticalScrollIndicator={false}>
-          {(creating || editingExercicio) && (
-            <ExercicioCoverPhoto
-              capa={editingExercicio?.capa ?? (stagedCapa ? { url: stagedCapa.uri, key: 'staged-capa' } : undefined)}
-              onUpload={handleUploadCapa}
-              onDelete={handleDeleteCapa}
-            />
-          )}
-          <Card style={styles.formCard}>
-            <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
-            <LabeledTextField
-              label="Descrição (opcional)"
-              value={descricao}
-              onChangeText={setDescricao}
-              maxLength={200}
-              multiline
-              numberOfLines={3}
-              style={styles.multiline}
-            />
-
-            <LabeledTextField
-              label="Carga máxima (1RM, opcional)"
-              value={cargaMaximaText}
-              onChangeText={setCargaMaximaText}
-              keyboardType="decimal-pad"
-              maxLength={7}
-            />
-            {Number(cargaMaximaText.replace(',', '.')) > 0 && (
-              <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
-            )}
-
-            <View style={styles.fieldsRow}>
-              <View style={styles.field}>
+            <ScrollView contentContainerStyle={styles.formScrollContent} showsVerticalScrollIndicator={false}>
+              <ExercicioCoverPhoto
+                capa={stagedCapa ? { url: stagedCapa.uri, key: 'staged-capa' } : undefined}
+                onUpload={handleUploadCapa}
+                onDelete={handleDeleteCapa}
+              />
+              <Card style={styles.formCard}>
+                <LabeledTextField label="Nome" value={nome} onChangeText={setNome} maxLength={50} />
                 <LabeledTextField
-                  label="Sets"
-                  value={setsText}
-                  onChangeText={setSetsText}
-                  keyboardType="number-pad"
-                  maxLength={2}
+                  label="Descrição (opcional)"
+                  value={descricao}
+                  onChangeText={setDescricao}
+                  maxLength={200}
+                  multiline
+                  numberOfLines={3}
+                  style={styles.multiline}
                 />
-              </View>
-              <View style={styles.field}>
+
                 <LabeledTextField
-                  label="Repetições"
-                  value={repsText}
-                  onChangeText={setRepsText}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                />
-              </View>
-              <View style={styles.field}>
-                <LabeledTextField
-                  label="Peso (kg)"
-                  value={pesoText}
-                  onChangeText={setPesoText}
+                  label="Carga máxima (1RM, opcional)"
+                  value={cargaMaximaText}
+                  onChangeText={setCargaMaximaText}
                   keyboardType="decimal-pad"
                   maxLength={7}
                 />
-              </View>
-            </View>
+                {Number(cargaMaximaText.replace(',', '.')) > 0 && (
+                  <PercentualTable cargaMaximaKg={Number(cargaMaximaText.replace(',', '.'))} />
+                )}
 
-            {(creating || editingExercicio) && (
-              <View style={styles.photoSection}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Fotos
-                </ThemedText>
-                <ExercicioImageGallery
-                  imagens={editingExercicio?.imagens ?? stagedImagens.map((s) => ({ url: s.uri, key: s.uri }))}
-                  onUpload={handleUploadImagem}
-                  onDelete={handleDeleteImagem}
-                />
-                <ThemedText type="small" themeColor="textSecondary">
-                  Vídeos
-                </ThemedText>
-                <VideoLinkGallery
-                  videos={editingExercicio?.videoUrls ?? stagedVideoUrls}
-                  onAdd={handleAddVideo}
-                  onRemove={handleRemoveVideo}
-                />
-              </View>
-            )}
+                <View style={styles.fieldsRow}>
+                  <View style={styles.field}>
+                    <LabeledTextField
+                      label="Sets"
+                      value={setsText}
+                      onChangeText={setSetsText}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                  </View>
+                  <View style={styles.field}>
+                    <LabeledTextField
+                      label="Repetições"
+                      value={repsText}
+                      onChangeText={setRepsText}
+                      keyboardType="number-pad"
+                      maxLength={3}
+                    />
+                  </View>
+                  <View style={styles.field}>
+                    <LabeledTextField
+                      label="Peso (kg)"
+                      value={pesoText}
+                      onChangeText={setPesoText}
+                      keyboardType="decimal-pad"
+                      maxLength={7}
+                    />
+                  </View>
+                </View>
 
-            <ThemedText type="small" themeColor="textSecondary">
-              Categoria
-            </ThemedText>
-            <View style={styles.chipRow}>
-              {categorias.map((categoria) => {
-                const selected = categoriaId === categoria._id;
-                return (
-                  <Pressable
-                    key={categoria._id}
-                    onPress={() => setCategoriaId(categoria._id)}
-                    style={[
-                      styles.chip,
-                      { borderColor: selected ? Brand.primary : theme.border },
-                      selected && { backgroundColor: Brand.primary },
-                    ]}>
-                    <ThemedText type="small" style={selected ? styles.chipTextActive : undefined}>
-                      {categoria.nome}
+                <View style={styles.photoSection}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Fotos
+                  </ThemedText>
+                  <ExercicioImageGallery
+                    imagens={stagedImagens.map((s) => ({ url: s.uri, key: s.uri }))}
+                    onUpload={handleUploadImagem}
+                    onDelete={handleDeleteImagem}
+                  />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Vídeos
+                  </ThemedText>
+                  <VideoLinkGallery videos={stagedVideoUrls} onAdd={handleAddVideo} onRemove={handleRemoveVideo} />
+                </View>
+
+                <ThemedText type="small" themeColor="textSecondary">
+                  Categoria
+                </ThemedText>
+                <View style={styles.chipRow}>
+                  {categorias.map((categoria) => {
+                    const selected = categoriaId === categoria._id;
+                    return (
+                      <Pressable
+                        key={categoria._id}
+                        onPress={() => setCategoriaId(categoria._id)}
+                        style={[
+                          styles.chip,
+                          { borderColor: selected ? Brand.primary : theme.border },
+                          selected && { backgroundColor: Brand.primary },
+                        ]}>
+                        <ThemedText type="small" style={selected ? styles.chipTextActive : undefined}>
+                          {categoria.nome}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                  {categorias.length === 0 && (
+                    <ThemedText type="small">Nenhuma categoria ainda — crie uma primeiro.</ThemedText>
+                  )}
+                </View>
+
+                <ThemedText type="small" themeColor="textSecondary">
+                  Exercícios substitutos (opcional)
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Aparecem na listagem como alternativa caso o equipamento esteja ocupado.
+                </ThemedText>
+                <SubstitutoPicker
+                  exercicios={exercicios}
+                  categoriaNomeById={categoriaNomeById}
+                  selectedIds={substitutoIds}
+                  onChange={setSubstitutoIds}
+                />
+
+                <View style={styles.secondaryRow}>
+                  <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
+                    <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Cancelar
                     </ThemedText>
                   </Pressable>
-                );
-              })}
-              {categorias.length === 0 && (
-                <ThemedText type="small">Nenhuma categoria ainda — crie uma primeiro.</ThemedText>
-              )}
-            </View>
-
-            <ThemedText type="small" themeColor="textSecondary">
-              Exercícios substitutos (opcional)
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Aparecem na listagem como alternativa caso o equipamento esteja ocupado.
-            </ThemedText>
-            <SubstitutoPicker
-              exercicios={exercicios.filter((e) => e._id !== editingId)}
-              categoriaNomeById={categoriaNomeById}
-              selectedIds={substitutoIds}
-              onChange={setSubstitutoIds}
-            />
-
-            <View style={styles.secondaryRow}>
-              {editingId && (
-                <Pressable onPress={() => setHistoricoVisible(true)} hitSlop={8} style={styles.secondaryButton}>
-                  <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
+                </View>
+              </Card>
+            </ScrollView>
+            <FixedBottomBar>
+              <GradientButton title="Criar exercício" onPress={handleCreate} loading={saving} disabled={!canCreate} />
+            </FixedBottomBar>
+          </>
+        ) : editingId && editingExercicio ? (
+          <>
+            <ScrollView
+              ref={formScrollViewRef}
+              contentContainerStyle={styles.formScrollContent}
+              showsVerticalScrollIndicator={false}>
+              <ExercicioEditForm
+                key={editingExercicio._id}
+                ref={editFormRef}
+                exercicio={editingExercicio}
+                categorias={categorias}
+                exercicios={exercicios}
+                onExercicioChange={(updated) =>
+                  setExercicios((prev) => prev.map((e) => (e._id === updated._id ? updated : e)))
+                }
+                onCloned={(clone) => {
+                  setExercicios((prev) => [...prev, clone].sort((a, b) => a.nome.localeCompare(b.nome)));
+                  startEditing(clone);
+                }}
+              />
+              <View style={styles.secondaryRow}>
+                <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
+                  <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
                   <ThemedText type="small" themeColor="textSecondary">
-                    Histórico
+                    Cancelar
                   </ThemedText>
                 </Pressable>
-              )}
-              {editingId && (
-                <Pressable onPress={handleClone} disabled={cloning} hitSlop={8} style={styles.secondaryButton}>
-                  <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Clonar
-                  </ThemedText>
-                </Pressable>
-              )}
-              <Pressable onPress={resetForm} hitSlop={8} style={styles.secondaryButton}>
-                <Ionicons name="close-outline" size={16} color={theme.textSecondary} />
-                <ThemedText type="small" themeColor="textSecondary">
-                  Cancelar
-                </ThemedText>
-              </Pressable>
-            </View>
-          </Card>
-          </ScrollView>
-          <FixedBottomBar>
-            <GradientButton
-              title={editingId ? 'Salvar alterações' : 'Criar exercício'}
-              onPress={handleSave}
-              loading={saving}
-              disabled={!canSave}
-            />
-          </FixedBottomBar>
+              </View>
+            </ScrollView>
+            <FixedBottomBar>
+              <GradientButton title="Salvar alterações" onPress={() => editFormRef.current?.save()} />
+            </FixedBottomBar>
           </>
         ) : !loading && exercicios.length === 0 ? (
           <View style={styles.scrollContent}>
@@ -606,6 +552,10 @@ export default function ExerciciosListaScreen() {
             initialNumToRender={100}
             contentContainerStyle={styles.sectionContent}
             showsVerticalScrollIndicator={false}
+            onScroll={(e) => {
+              listScrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
             onEndReachedThreshold={0.4}
             onEndReached={hasMore ? loadMore : undefined}
             ListHeaderComponent={
@@ -632,7 +582,6 @@ export default function ExerciciosListaScreen() {
             renderItem={({ item, index, section }) => {
               const isLastInSection = index === section.data.length - 1;
               return (
-                <SwipeableRow onDelete={() => handleDelete(item)}>
                   <View style={[styles.itemWrap, isLastInSection && styles.itemWrapLastInSection]}>
                     <Pressable onPress={() => startEditing(item)}>
                       <Card style={styles.itemRow}>
@@ -671,18 +620,11 @@ export default function ExerciciosListaScreen() {
                       onSaveFields={(fields) => handleQuickUpdate(item, fields)}
                     />
                   </View>
-                </SwipeableRow>
               );
             }}
           />
         )}
       </SafeAreaView>
-
-      <ExercicioHistoricoModal
-        visible={historicoVisible}
-        exercicioId={editingId}
-        onClose={() => setHistoricoVisible(false)}
-      />
     </ThemedView>
   );
 }
@@ -693,6 +635,8 @@ const styles = StyleSheet.create({
   scrollContent: { gap: Spacing.three, paddingBottom: Spacing.five },
   formScrollContent: { gap: Spacing.three, paddingBottom: FIXED_BOTTOM_BAR_SPACE },
   formCard: { gap: Spacing.two },
+  headerActionsRow: { flexDirection: 'row', alignItems: 'center' },
+  headerIconButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   photoSection: { gap: Spacing.two },
   fieldsRow: { flexDirection: 'row', gap: Spacing.two },

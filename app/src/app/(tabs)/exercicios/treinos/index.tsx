@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,21 +11,33 @@ import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { GradientButton } from '@/components/gradient-button';
+import { HeaderSearchField } from '@/components/header-search-field';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { ListFooterSpinner } from '@/components/list-footer-spinner';
-import { SwipeableRow } from '@/components/swipeable-row';
+import { SortMenuButton } from '@/components/sort-menu-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
 import { Brand, Spacing } from '@/constants/theme';
 import { usePaginatedList } from '@/hooks/use-paginated-list';
+import { useTheme } from '@/hooks/use-theme';
 import type { Treino } from '@/types/workout';
+import { LIST_SORT_OPTIONS, matchesSearch, sortByNome, type ListSortBy } from '@/utils/listSort';
 
 export default function TreinosListScreen() {
+  const theme = useTheme();
   const { items: treinos, setItems: setTreinos, loading, loadingMore, hasMore, reload, loadMore } =
     usePaginatedList(listTreinosPage);
   const [newNome, setNewNome] = useState('');
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>('ordem');
+
+  const filteredSortedTreinos = useMemo(() => {
+    const filtered = treinos.filter((t) => matchesSearch(t.nome, search));
+    return sortByNome(filtered, sortBy, (t) => t.nome);
+  }, [treinos, search, sortBy]);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,10 +80,37 @@ export default function TreinosListScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <BackHeader title="Treinos" />
+        <BackHeader
+          title="Treinos"
+          titleSlot={
+            searchOpen ? (
+              <HeaderSearchField value={search} onChangeText={setSearch} placeholder="Buscar treino..." />
+            ) : undefined
+          }
+          rightActions={
+            treinos.length === 0 ? undefined : searchOpen ? (
+              <Pressable
+                onPress={() => {
+                  setSearchOpen(false);
+                  setSearch('');
+                }}
+                hitSlop={10}
+                style={styles.headerIconButton}>
+                <Ionicons name="close" size={20} color={theme.text} />
+              </Pressable>
+            ) : (
+              <View style={styles.headerActionsRow}>
+                <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.headerIconButton}>
+                  <Ionicons name="search" size={20} color={theme.text} />
+                </Pressable>
+                <SortMenuButton value={sortBy} options={LIST_SORT_OPTIONS} onChange={setSortBy} />
+              </View>
+            )
+          }
+        />
 
         <FlatList
-          data={treinos}
+          data={filteredSortedTreinos}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -91,26 +130,28 @@ export default function TreinosListScreen() {
           }
           ListHeaderComponentStyle={styles.formHeader}
           ListEmptyComponent={
-            !loading ? <EmptyState icon="list-outline" title="Nenhum treino ainda. Crie o primeiro acima." /> : null
+            loading ? null : treinos.length === 0 ? (
+              <EmptyState icon="list-outline" title="Nenhum treino ainda. Crie o primeiro acima." />
+            ) : (
+              <EmptyState icon="search-outline" title="Nenhum treino encontrado." />
+            )
           }
           ListFooterComponent={<ListFooterSpinner visible={loadingMore} />}
           renderItem={({ item }) => (
-            <SwipeableRow onDelete={() => handleDelete(item)}>
-              <Pressable onPress={() => router.push(`/(tabs)/exercicios/treinos/${item._id}`)}>
-                <Card style={styles.row}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText type="smallBold">{item.nome}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {item.exercicioIds.length} {item.exercicioIds.length === 1 ? 'exercício' : 'exercícios'}
-                    </ThemedText>
-                  </View>
-                  <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
-                    <Ionicons name="trash-outline" size={18} color="#e53935" />
-                  </Pressable>
-                  <Ionicons name="chevron-forward" size={20} color={Brand.primary} />
-                </Card>
-              </Pressable>
-            </SwipeableRow>
+            <Pressable onPress={() => router.push(`/(tabs)/exercicios/treinos/${item._id}`)}>
+              <Card style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="smallBold">{item.nome}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {item.exercicioIds.length} {item.exercicioIds.length === 1 ? 'exercício' : 'exercícios'}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.deleteButton}>
+                  <Ionicons name="trash-outline" size={18} color="#e53935" />
+                </Pressable>
+                <Ionicons name="chevron-forward" size={20} color={Brand.primary} />
+              </Card>
+            </Pressable>
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
@@ -126,6 +167,8 @@ const styles = StyleSheet.create({
   formCard: { gap: Spacing.two },
   formHeader: { marginBottom: Spacing.three },
   separator: { height: Spacing.two },
+  headerActionsRow: { flexDirection: 'row', alignItems: 'center' },
+  headerIconButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   deleteButton: { padding: Spacing.one },
 });

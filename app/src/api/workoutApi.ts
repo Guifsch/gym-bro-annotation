@@ -248,25 +248,6 @@ export async function deleteSessao(id: string): Promise<void> {
   await apiClient.delete(`/api/sessoes/${id}`);
 }
 
-export interface UpsertEntryParams {
-  sessaoId: string;
-  exercicioId: string;
-  sets?: number;
-  reps?: number;
-  pesoKg?: number;
-}
-
-export interface UpsertEntryResult {
-  sessao: Sessao;
-  exercicio: Exercicio;
-  changed: boolean;
-}
-
-export async function upsertSessaoEntry(params: UpsertEntryParams): Promise<UpsertEntryResult> {
-  const { data } = await apiClient.put('/api/sessoes/entries', params);
-  return data;
-}
-
 export interface RefeicaoItemParams {
   id: string;
   nome: string;

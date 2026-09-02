@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,9 +11,10 @@ import { BackHeader } from '@/components/back-header';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { GradientButton } from '@/components/gradient-button';
+import { HeaderSearchField } from '@/components/header-search-field';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { ListFooterSpinner } from '@/components/list-footer-spinner';
-import { SwipeableRow } from '@/components/swipeable-row';
+import { SortMenuButton } from '@/components/sort-menu-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
@@ -22,6 +23,13 @@ import { usePaginatedList } from '@/hooks/use-paginated-list';
 import { useTheme } from '@/hooks/use-theme';
 import type { BodyGoalSummary } from '@/types/workout';
 import { formatDateDisplay } from '@/utils/date';
+import { LIST_SORT_OPTIONS, matchesSearch, sortByNome, type ListSortBy } from '@/utils/listSort';
+
+// `nome` is optional on a goal (a user can leave it blank) — this is the same fallback used both
+// for display and as the accessor for search/sort, so they always agree on what a goal is "called".
+function goalDisplayNome(goal: BodyGoalSummary): string {
+  return goal.nome || `Meta de ${goal.pesoMetaKg} kg`;
+}
 
 export default function AvaliacaoFisicaListScreen() {
   const theme = useTheme();
@@ -37,6 +45,14 @@ export default function AvaliacaoFisicaListScreen() {
   const [newNome, setNewNome] = useState('');
   const [newMetaText, setNewMetaText] = useState('');
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>('ordem');
+
+  const filteredSortedGoals = useMemo(() => {
+    const filtered = goals.filter((g) => matchesSearch(goalDisplayNome(g), search));
+    return sortByNome(filtered, sortBy, goalDisplayNome);
+  }, [goals, search, sortBy]);
 
   useFocusEffect(
     useCallback(() => {
@@ -86,10 +102,37 @@ export default function AvaliacaoFisicaListScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <BackHeader title="Avaliação Física" />
+        <BackHeader
+          title="Avaliação Física"
+          titleSlot={
+            searchOpen ? (
+              <HeaderSearchField value={search} onChangeText={setSearch} placeholder="Buscar meta..." />
+            ) : undefined
+          }
+          rightActions={
+            goals.length === 0 ? undefined : searchOpen ? (
+              <Pressable
+                onPress={() => {
+                  setSearchOpen(false);
+                  setSearch('');
+                }}
+                hitSlop={10}
+                style={styles.headerIconButton}>
+                <Ionicons name="close" size={20} color={theme.text} />
+              </Pressable>
+            ) : (
+              <View style={styles.headerActionsRow}>
+                <Pressable onPress={() => setSearchOpen(true)} hitSlop={10} style={styles.headerIconButton}>
+                  <Ionicons name="search" size={20} color={theme.text} />
+                </Pressable>
+                <SortMenuButton value={sortBy} options={LIST_SORT_OPTIONS} onChange={setSortBy} />
+              </View>
+            )
+          }
+        />
 
         <FlatList
-          data={goals}
+          data={filteredSortedGoals}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -122,12 +165,15 @@ export default function AvaliacaoFisicaListScreen() {
           }
           ListHeaderComponentStyle={styles.formHeader}
           ListEmptyComponent={
-            !loading ? <EmptyState icon="flag-outline" title="Nenhuma meta ainda. Crie a primeira acima." /> : null
+            loading ? null : goals.length === 0 ? (
+              <EmptyState icon="flag-outline" title="Nenhuma meta ainda. Crie a primeira acima." />
+            ) : (
+              <EmptyState icon="search-outline" title="Nenhuma meta encontrada." />
+            )
           }
           ListFooterComponent={<ListFooterSpinner visible={loadingMore} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item: goal }) => (
-            <SwipeableRow onDelete={() => handleDelete(goal)}>
               <Pressable onPress={() => router.push(`/(tabs)/extras/avaliacao-fisica/${goal._id}`)}>
                 <Card style={styles.row}>
                   <View style={styles.iconBadge}>
@@ -135,7 +181,7 @@ export default function AvaliacaoFisicaListScreen() {
                   </View>
 
                   <View style={styles.rowContent}>
-                    <ThemedText type="smallBold">{goal.nome || `Meta de ${goal.pesoMetaKg} kg`}</ThemedText>
+                    <ThemedText type="smallBold">{goalDisplayNome(goal)}</ThemedText>
 
                     <View style={styles.weightRow}>
                       {goal.latestPesoKg !== null && (
@@ -167,7 +213,6 @@ export default function AvaliacaoFisicaListScreen() {
                   <Ionicons name="chevron-forward" size={20} color={Brand.primary} />
                 </Card>
               </Pressable>
-            </SwipeableRow>
           )}
         />
       </SafeAreaView>
@@ -182,6 +227,8 @@ const styles = StyleSheet.create({
   formCard: { gap: Spacing.two },
   formHeader: { marginBottom: Spacing.three },
   separator: { height: Spacing.two },
+  headerActionsRow: { flexDirection: 'row', alignItems: 'center' },
+  headerIconButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   iconBadge: {
     width: 44,

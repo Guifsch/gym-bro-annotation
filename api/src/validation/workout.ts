@@ -65,11 +65,3 @@ export const logTreinoDaySchema = z.object({
   treinoId: uuid,
   date: dateString,
 });
-
-export const upsertSessaoEntrySchema = z.object({
-  sessaoId: uuid,
-  exercicioId: uuid,
-  sets: z.number().int().min(1).max(50).optional(),
-  reps: z.number().int().min(1).max(500).optional(),
-  pesoKg: z.number().min(0).max(1000).optional(),
-});

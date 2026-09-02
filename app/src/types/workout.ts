@@ -42,20 +42,12 @@ export interface Treino {
 export type LogField = 'sets' | 'reps' | 'pesoKg';
 export type LogFields = Partial<Record<LogField, number>>;
 
-export interface SessaoEntry {
-  _id: string;
-  exercicioId: string;
-  sets?: number;
-  reps?: number;
-  pesoKg?: number;
-  updatedAt?: string;
-}
-
+/** Marks that `treinoId` happened on `date` — no performance data of its own (see
+ * `Exercicio.sets/reps/pesoKg` + `historico[]` for that, single source of truth since ago/2026). */
 export interface Sessao {
   _id: string;
   treinoId: string;
   date: string;
-  entries: SessaoEntry[];
 }
 
 export interface DiaTreino {

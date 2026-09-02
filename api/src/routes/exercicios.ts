@@ -211,15 +211,20 @@ router.patch(
     const setOps: Record<string, unknown> = { ...restBody };
     if (resolved.value !== undefined) setOps.substitutoIds = resolved.value;
 
-    // Histórico only tracks sets/reps/pesoKg changes — editing nome/descrição/categoria/etc.
-    // alone (or resaving the same numbers) shouldn't push a redundant snapshot.
-    const setsRepsPesoChanged =
+    // Histórico tracks nome/descrição/sets/reps/pesoKg changes (ago/2026: nome/descrição joined
+    // sets/reps/pesoKg here once the per-session entry override was removed — every meaningful
+    // change to an exercise, wherever it's edited from, now leaves a dated trail). Editing só
+    // categoria/substitutos/cargaMáxima, or resaving the same values, doesn't push a redundant
+    // snapshot.
+    const historicoTrigger =
+      (body.nome !== undefined && body.nome !== existing.nome) ||
+      (body.descricao !== undefined && body.descricao !== existing.descricao) ||
       (body.sets !== undefined && body.sets !== existing.sets) ||
       (body.reps !== undefined && body.reps !== existing.reps) ||
       (body.pesoKg !== undefined && body.pesoKg !== existing.pesoKg);
 
     const updateOps: Record<string, unknown> = { $set: setOps };
-    if (setsRepsPesoChanged) {
+    if (historicoTrigger) {
       updateOps.$push = { historico: { $each: [snapshot], $slice: -50 } };
     }
 

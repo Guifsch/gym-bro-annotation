@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios';
 import * as Crypto from 'expo-crypto';
 
 import { getApiErrorMessage } from '@/api/apiClient';
-import { upsertSessaoEntry, type UpsertEntryParams } from '@/api/workoutApi';
+import { updateExercicio, type UpdateExercicioParams } from '@/api/workoutApi';
 import { showToast } from '@/components/toast';
 
 import { readJson, writeJson } from './storage';
@@ -18,10 +18,15 @@ const QUEUE_STORAGE_KEY = 'gymbro.mutationQueue.v1';
 const BASE_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 60_000;
 
+interface UpdateExercicioPayload {
+  exercicioId: string;
+  fields: UpdateExercicioParams;
+}
+
 interface QueuedMutation {
   id: string;
-  kind: 'upsertSessaoEntry';
-  payload: UpsertEntryParams;
+  kind: 'updateExercicio';
+  payload: UpdateExercicioPayload;
   attempts: number;
   nextAttemptAt: number;
 }
@@ -61,8 +66,8 @@ async function ensureInitialized(): Promise<void> {
 
 async function executeMutation(mutation: QueuedMutation): Promise<void> {
   switch (mutation.kind) {
-    case 'upsertSessaoEntry':
-      await upsertSessaoEntry(mutation.payload);
+    case 'updateExercicio':
+      await updateExercicio(mutation.payload.exercicioId, mutation.payload.fields);
       return;
   }
 }
@@ -106,11 +111,16 @@ export async function drainQueue(): Promise<void> {
   }
 }
 
-export async function enqueueUpsertSessaoEntry(payload: UpsertEntryParams): Promise<void> {
+/** Queues a partial `Exercicio` update (nome/descrição/sets/reps/pesoKg/etc.) — used for every
+ * exercise edit that can plausibly happen mid-workout with bad gym connectivity: the quick
+ * sets/reps/kg row and the full edit screen alike, from either the calendar or the Exercícios tab.
+ * Same target endpoint (`PATCH /api/exercicios/:id`) as a direct `updateExercicio()` call — this
+ * just makes it resilient to being offline when it fires. */
+export async function enqueueUpdateExercicio(payload: UpdateExercicioPayload): Promise<void> {
   await ensureInitialized();
   queue.push({
     id: Crypto.randomUUID(),
-    kind: 'upsertSessaoEntry',
+    kind: 'updateExercicio',
     payload,
     attempts: 0,
     nextAttemptAt: Date.now(),

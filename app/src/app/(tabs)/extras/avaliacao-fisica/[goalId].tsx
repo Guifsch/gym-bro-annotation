@@ -20,7 +20,6 @@ import { GradientButton } from '@/components/gradient-button';
 import { LabeledTextField } from '@/components/labeled-text-field';
 import { LoadingView } from '@/components/loading-view';
 import { SingleDatePickerModal } from '@/components/single-date-picker-modal';
-import { SwipeableRow } from '@/components/swipeable-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { showToast } from '@/components/toast';
@@ -449,8 +448,7 @@ export default function AvaliacaoFisicaGoalScreen() {
                     ) : (
                       <View style={styles.historyList}>
                         {filteredHistoryRows.map(({ entry, index }) => (
-                          <SwipeableRow key={entry._id} onDelete={() => handleDelete(entry)}>
-                            <Card style={styles.historyRow}>
+                            <Card key={entry._id} style={styles.historyRow}>
                               <Pressable onPress={() => handleEditFromHistory(entry)} style={styles.historyContent}>
                                 <View style={styles.historyHeader}>
                                   <ThemedText type="smallBold">{formatDateDisplay(entry.date)}</ThemedText>
@@ -490,7 +488,6 @@ export default function AvaliacaoFisicaGoalScreen() {
                                 </Pressable>
                               </View>
                             </Card>
-                          </SwipeableRow>
                         ))}
                       </View>
                     )}
