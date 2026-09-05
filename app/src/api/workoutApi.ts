@@ -12,6 +12,7 @@ import type {
   ExercicioHistoricoEntry,
   Refeicao,
   Sessao,
+  TimerPreset,
   Treino,
 } from '@/types/workout';
 
@@ -302,6 +303,20 @@ export async function updateRefeicao(id: string, params: UpdateRefeicaoParams): 
 
 export async function deleteRefeicao(id: string): Promise<void> {
   await apiClient.delete(`/api/refeicoes/${id}`);
+}
+
+export async function listTimerPresets(): Promise<TimerPreset[]> {
+  const { data } = await apiClient.get('/api/timer-presets');
+  return data.presets;
+}
+
+export async function createTimerPreset(params: { id: string; seconds: number }): Promise<TimerPreset> {
+  const { data } = await apiClient.post('/api/timer-presets', params);
+  return data.preset;
+}
+
+export async function deleteTimerPreset(id: string): Promise<void> {
+  await apiClient.delete(`/api/timer-presets/${id}`);
 }
 
 export interface UpsertBodyMetricEntryParams {

@@ -77,6 +77,11 @@ export interface Refeicao {
   observacoes?: string;
 }
 
+export interface TimerPreset {
+  _id: string;
+  seconds: number;
+}
+
 export interface BodyMetricMedidas {
   cintura?: number;
   quadril?: number;

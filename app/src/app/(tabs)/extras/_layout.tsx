@@ -7,6 +7,7 @@ export default function ExtrasLayout() {
       <Stack.Screen name="alimentacao" />
       <Stack.Screen name="relatorios" />
       <Stack.Screen name="avaliacao-fisica" />
+      <Stack.Screen name="timer" />
     </Stack>
   );
 }

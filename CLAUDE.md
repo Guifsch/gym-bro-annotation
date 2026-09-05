@@ -271,6 +271,38 @@ Logo do app (`AuthBadge`) pulsando sobre fundo com leve tom verde — usado na c
 
 ---
 
+## Timer de descanso (`extras/timer.tsx`) — módulo nativo próprio (set/2026)
+
+O timer roda em segundo plano de verdade: notificação com a contagem na barra, botões de Pausar/Retomar/Zerar que funcionam com o app fechado, vibração de alarme aos 00:00 com a tela bloqueada ou outro app na frente, e uma **bolinha flutuante** opcional por cima dos outros apps. Quem faz isso é um **Expo Module local em Kotlin**, `app/modules/rest-timer/` — **não** o `@notifee/react-native` (arquivado, e que já tinha custado 3 plugins nativos de contorno; foi por isso que a versão antiga do timer foi removida inteira).
+
+**Por que módulo local e não plugin/pacote:** `android/` é gerado (CNG, gitignored) — código nativo escrito lá some no próximo `expo prebuild`. Um módulo em `modules/` é autolinkado sozinho (`expo-modules-autolinking` varre `./modules` por padrão), tem `AndroidManifest.xml` próprio que é *mergeado* no do app (permissões + `<service>` + `<receiver>`, sem config plugin nenhum) e não adiciona dependência de terceiros no `package.json`. Só Android (`platforms: ["android"]`); no iOS/web o JS cai no alarme em `Vibration` puro, que só funciona com o app aberto.
+
+**As peças nativas, e por que cada uma existe:**
+
+- **Notificação de contagem** (`RestTimerNotifications.runningNotification`): `setUsesChronometer(true)` + `setChronometerCountDown(true)` + `setWhen(endsAt)` — **quem conta os segundos é o Android**, não o app. É por isso que ela continua certa mesmo com o processo morto, e por isso não existe update por segundo vindo do JS.
+- **`AlarmManager.setAlarmClock()`** no instante do 00:00 (`RestTimerController.scheduleAlarm`): a variante mais protegida que existe — imune a Doze/otimização de bateria — e, por ser alarme exato, dá ao app o direito de **iniciar foreground service estando em segundo plano**, que é como a vibração acontece. Permissão `USE_EXACT_ALARM` (auto-concedida no Android 13+); no Android 12 é `SCHEDULE_EXACT_ALARM`, revogável — se estiver revogada cai em `setAndAllowWhileIdle` (inexato) e a UI mostra o aviso de `exactAlarmBlocked`.
+- **`RestTimerAlarmService`** (foreground service curto, `specialUse`): segura um `PARTIAL_WAKE_LOCK` e vibra por até 30s. **Foi isso que faltava na tentativa anterior** — o `Vibration.vibrate()` do JS não dispara com a tela bloqueada porque o processo está congelado. Os dois detalhes que fazem a vibração passar mesmo no silencioso: `VibrationAttributes.USAGE_ALARM` (API 33+) / `AudioAttributes.USAGE_ALARM` abaixo disso, e o wake lock. Ao morrer faz `stopForeground(STOP_FOREGROUND_DETACH)` pra o aviso "Descanso concluído!" não sumir junto.
+- **`RestTimerBubbleService` + `RestTimerBubbleView`** (a bolinha, opcional): outro foreground service `specialUse`, ligado pelo switch "Bolinha flutuante". Também precisa ser foreground — em segundo plano o Android congela o processo (a contagem da bolinha pararia) e pode matá-lo (a bolinha sumiria). Detalhes que não são óbvios:
+  - **Ela adota a notificação de contagem que já existe** (`startForeground(NOTIFICATION_RUNNING, …)`) em vez de postar uma segunda, senão o usuário veria duas notificações do mesmo timer. Consequência: enquanto esse serviço está em foreground, `cancel(NOTIFICATION_RUNNING)` é **ignorado** pelo sistema — por isso `reset()` e `onAlarmFired()` chamam `RestTimerBubble.dismiss(removeNotification = true)` **antes** de cancelar, e o encerramento é por comando explícito (`STOP_FOREGROUND_REMOVE`/`DETACH`), não por `stopService` seguido de `cancel` (que seria uma corrida).
+  - **"Minimizado" é medido por `ActivityLifecycleCallbacks`** (contador de activities iniciadas), não pelo `AppState` do JS — o JS pode estar congelado justamente quando importa. O valor inicial vem do `importance` do processo (`ActivityManager.getMyMemoryState`), porque não existe callback retroativo.
+  - Gestos: arrastar move livre (sem grudar na borda, e a posição fica no SharedPreferences), toque curto abre o app na tela do timer (mesmo `EXTRA_OPEN_TIMER` da notificação), segurar esconde até o próximo play.
+  - **Aos 00:00 a bolinha sai** e entra o alarme normal — decisão de UX pra não ter duas notificações concorrendo.
+  - Permissão `SYSTEM_ALERT_WINDOW` não tem diálogo: só a tela de sistema. Ligar o switch sem ela abre `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` direto, e `bubbleBlocked` (rechecado no `AppState` `'active'`) mostra o aviso clicável.
+
+**Estado mora no SharedPreferences** (`RestTimerStore`), não em memória: o `RestTimerActionReceiver` costuma rodar num processo recém-criado só pra entregar o toque no botão da notificação — é o que faz Pausar/Zerar funcionarem com o app fechado. `RestTimerController.commit()` é o funil único de mudança de estado: salva, sincroniza a bolinha e emite o evento pro JS (`RestTimerEvents.listener`, setado no `OnCreate` do `RestTimerModule`).
+
+**`stores/timerStore.ts` é espelho, não dono.** Delega play/pause/reset/+1min pro nativo, escuta `onTimerStateChange` (é assim que a `MiniTimerBar` já aparece pausada quando você pausou pela notificação) e refaz `getState()` no `AppState` voltando pra `'active'`. O `setInterval` de 1s sobrou só pra redesenhar o contador **dentro** do app. O wrapper JS do módulo fica em **`src/native/rest-timer.ts`**, e não em `modules/rest-timer/index.ts`, porque o alias `@/*` do tsconfig aponta só pra `src/`.
+
+**Gotchas ao mexer nisso:**
+
+- **Canal de notificação é imutável depois de criado** — mudar importância/vibração exige trocar o id (`rest_timer_running_v1` → `_v2`), senão a mudança só vale pra quem instalar o app do zero.
+- **A vibração é do serviço, não do canal** (`enableVibration(false)` nos dois canais): canal só sabe vibrar uma vez e não sabe parar quando o usuário toca em "Parar".
+- **Mudança em Kotlin exige rebuild nativo** (`npx expo run:android` / `gradlew assembleRelease`) — Fast Refresh não alcança. Mudança só no `timerStore.ts`/`rest-timer.ts` é JS normal.
+- **App "forçado a parar"**: force stop cancela alarmes e notificações por design do Android — não é bug. Já em Xiaomi/Samsung, alarme que não dispara com o app fechado costuma ser restrição de bateria do OEM ("Autostart"/"Sem restrições").
+- **Play Store**: `specialUse` exigiria justificativa na revisão. Irrelevante enquanto o app for instalado por APK.
+
+---
+
 ## Web (`web/`)
 
 Companion desktop do app RN — mesma API, mesmo banco. Stack: Vite + Vue 3 + Vuetify 3, **sem** Nuxt/SSR (SPA pura, `vue-router` com `createWebHistory`, Pinia só pra auth). Layout de dashboard com sidebar fixa (verde, gradiente, mesma cor da marca `#15b580`) em vez do layout de abas do RN — funcionalidade replicada, visual não.

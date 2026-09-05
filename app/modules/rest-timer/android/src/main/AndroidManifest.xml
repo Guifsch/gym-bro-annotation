@@ -1,0 +1,41 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- POST_NOTIFICATIONS: sem ela (Android 13+) a notificação do timer nem aparece.
+       USE_EXACT_ALARM: concedida na instalação (API 33+), é o que garante que o alarme dispare no
+       segundo certo mesmo em Doze. SCHEDULE_EXACT_ALARM cobre o Android 12, onde a permissão
+       equivalente é revogável pelo usuário.
+       SYSTEM_ALERT_WINDOW: a bolinha flutuante por cima de outros apps (o manifesto gerado do app
+       também declara, mas ele é regenerado por prebuild — aqui é o lugar que sobrevive).
+       FOREGROUND_SERVICE_SPECIAL_USE: os dois serviços abaixo. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.WAKE_LOCK"/>
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+
+  <application>
+    <service
+      android:name=".RestTimerAlarmService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Alarme de fim do timer de descanso"/>
+    </service>
+
+    <service
+      android:name=".RestTimerBubbleService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Bolinha flutuante do timer de descanso"/>
+    </service>
+
+    <receiver
+      android:name=".RestTimerActionReceiver"
+      android:exported="false"/>
+  </application>
+</manifest>

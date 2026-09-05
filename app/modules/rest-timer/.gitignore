@@ -1,0 +1,5 @@
+# Saída de build do Gradle do próprio módulo — gerada, e com caminhos longos demais pro Windows
+# indexar (o `git add` chega a falhar com "Filename too long" nos .dex intermediários).
+android/build/
+android/.gradle/
+android/.cxx/

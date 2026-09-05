@@ -59,6 +59,12 @@ export default function ExtrasLandingScreen() {
           subtitle="Acompanhe suas metas de peso e medidas"
           onPress={() => router.push('/(tabs)/extras/avaliacao-fisica')}
         />
+        <LandingOption
+          icon="timer-outline"
+          title="Timer"
+          subtitle="Timer de descanso e barra fixa"
+          onPress={() => router.push('/(tabs)/extras/timer')}
+        />
       </SafeAreaView>
     </ThemedView>
   );

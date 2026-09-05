@@ -11,6 +11,7 @@ import categoriasRoutes from './routes/categorias';
 import exerciciosRoutes from './routes/exercicios';
 import refeicoesRoutes from './routes/refeicoes';
 import sessoesRoutes from './routes/sessoes';
+import timerPresetsRoutes from './routes/timerPresets';
 import treinosRoutes from './routes/treinos';
 import { env } from './utils/env';
 
@@ -40,6 +41,7 @@ export function createApp() {
   app.use('/api/sessoes', sessoesRoutes);
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/body-goals', bodyGoalsRoutes);
+  app.use('/api/timer-presets', timerPresetsRoutes);
 
   app.use(errorHandler);
 
