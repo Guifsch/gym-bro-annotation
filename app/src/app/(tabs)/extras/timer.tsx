@@ -22,6 +22,8 @@ export default function TimerScreen() {
   const bubbleBlocked = useTimerStore((s) => s.bubbleBlocked);
   const setBubbleEnabled = useTimerStore((s) => s.setBubbleEnabled);
   const openBubbleSettings = useTimerStore((s) => s.openBubbleSettings);
+  const notificationsEnabled = useTimerStore((s) => s.notificationsEnabled);
+  const setNotificationsEnabled = useTimerStore((s) => s.setNotificationsEnabled);
   const setDefaultPresetId = useTimerStore((s) => s.setDefaultPresetId);
 
   return (
@@ -33,6 +35,23 @@ export default function TimerScreen() {
           <RestTimer />
 
           <Card style={styles.barCard}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="smallBold">Notificações</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Necessárias para ver a contagem na barra e o aviso de fim com o app fechado. Ligar
+                  ou desligar abre as configurações do Android quando o sistema exige.
+                </ThemedText>
+              </View>
+              <Switch
+                value={notificationsEnabled}
+                onValueChange={setNotificationsEnabled}
+                trackColor={{ true: Brand.primary }}
+              />
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <ThemedText type="smallBold">Barra fixa</ThemedText>

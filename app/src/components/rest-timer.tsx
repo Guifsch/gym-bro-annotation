@@ -32,7 +32,7 @@ export function RestTimer() {
   const handleReset = useTimerStore((s) => s.handleReset);
   const stopAlarm = useTimerStore((s) => s.stopAlarm);
   const addOneMinute = useTimerStore((s) => s.addOneMinute);
-  const notificationsBlocked = useTimerStore((s) => s.notificationsBlocked);
+  const notificationsEnabled = useTimerStore((s) => s.notificationsEnabled);
   const exactAlarmBlocked = useTimerStore((s) => s.exactAlarmBlocked);
   const openTimerSettings = useTimerStore((s) => s.openTimerSettings);
 
@@ -159,11 +159,11 @@ export function RestTimer() {
         </View>
       </View>
 
-      {(notificationsBlocked || exactAlarmBlocked) && (
+      {(!notificationsEnabled || exactAlarmBlocked) && (
         <Pressable onPress={openTimerSettings} style={[styles.permissionWarning, { borderColor: Brand.accent }]}>
           <Ionicons name="warning-outline" size={18} color={Brand.accent} />
           <ThemedText type="small" style={styles.permissionWarningText}>
-            {notificationsBlocked
+            {!notificationsEnabled
               ? 'Ative as notificações para acompanhar o timer com o app fechado. Toque aqui.'
               : 'Libere "alarmes e lembretes" para o aviso sair na hora exata. Toque aqui.'}
           </ThemedText>

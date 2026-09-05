@@ -35,6 +35,7 @@ declare class RestTimerNativeModule extends NativeModule<RestTimerModuleEvents> 
   setBubbleEnabled(enabled: boolean): void;
   canDrawOverlays(): boolean;
   openOverlaySettings(): void;
+  areNotificationsEnabled(): boolean;
   canScheduleExactAlarms(): boolean;
   openExactAlarmSettings(): void;
   openNotificationSettings(): void;
@@ -49,7 +50,11 @@ export const isRestTimerNativeSupported = Platform.OS === 'android' && nativeMod
 export const RestTimerNative = nativeModule;
 
 /** Pede POST_NOTIFICATIONS (Android 13+). Sem ela o timer continua contando e vibrando, mas nada
- * aparece na barra de notificações — que é justamente o ponto da feature. */
+ * aparece na barra de notificações — que é justamente o ponto da feature.
+ *
+ * O `true` daqui não é garantia de que as notificações estão ligadas: no Android 12 e abaixo não
+ * existe permissão nenhuma pra pedir, e o usuário pode ter desligado tudo nas configurações. Quem
+ * responde isso é o `areNotificationsEnabled()` do módulo nativo. */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   if (Platform.Version < 33) return true;

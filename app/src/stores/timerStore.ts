@@ -58,8 +58,9 @@ interface TimerState {
   miniBarEnabled: boolean;
   bubbleEnabled: boolean;
   defaultPresetId: string | null;
-  /** Notificações negadas: o timer ainda vibra no fim, mas nada aparece na barra. */
-  notificationsBlocked: boolean;
+  /** Espelha o que o Android diz: com isso desligado o timer ainda vibra no fim, mas nada
+   * aparece na barra de notificações. Só o sistema liga/desliga — o app não tem essa chave. */
+  notificationsEnabled: boolean;
   /** Só no Android 12 com "alarmes e lembretes" revogado — o alarme pode atrasar alguns minutos. */
   exactAlarmBlocked: boolean;
   /** "Exibir sobre outros apps" negado: a bolinha não tem como aparecer. */
@@ -72,6 +73,7 @@ interface TimerState {
   saveCurrentAsPreset: () => Promise<TimerPreset | null>;
   deletePreset: (preset: TimerPreset) => Promise<void>;
   setVibrarAtivo: (value: boolean) => void;
+  setNotificationsEnabled: (enabled: boolean) => void;
   setMiniBarEnabled: (enabled: boolean) => void;
   setBubbleEnabled: (enabled: boolean) => void;
   setDefaultPresetId: (id: string | null) => void;
@@ -173,6 +175,7 @@ export const useTimerStore = create<TimerState>((set, get) => {
     // bolinha só apareceria no próximo play (o `sync` dela mora no commit de estado do Kotlin).
     if (bubbleEnabled && overlayAllowed && bubbleBlocked) RestTimerNative!.setBubbleEnabled(true);
     set({
+      notificationsEnabled: RestTimerNative!.areNotificationsEnabled(),
       exactAlarmBlocked: !RestTimerNative!.canScheduleExactAlarms(),
       bubbleBlocked: bubbleEnabled && !overlayAllowed,
     });
@@ -181,8 +184,7 @@ export const useTimerStore = create<TimerState>((set, get) => {
   async function ensureNotificationAccess() {
     if (!isRestTimerNativeSupported || notificationPermissionRequested) return;
     notificationPermissionRequested = true;
-    const granted = await requestNotificationPermission();
-    set({ notificationsBlocked: !granted });
+    await requestNotificationPermission();
     refreshPermissionFlags();
   }
 
@@ -226,7 +228,7 @@ export const useTimerStore = create<TimerState>((set, get) => {
     miniBarEnabled: false,
     bubbleEnabled: false,
     defaultPresetId: null,
-    notificationsBlocked: false,
+    notificationsEnabled: true,
     exactAlarmBlocked: false,
     bubbleBlocked: false,
 
@@ -295,6 +297,27 @@ export const useTimerStore = create<TimerState>((set, get) => {
       // preferência mora nos dois lados: aqui pro switch, e no SharedPreferences pro serviço.
       if (isRestTimerNativeSupported) RestTimerNative!.setVibrationEnabled(value);
       if (!value) stopAlarmVibration();
+    },
+
+    setNotificationsEnabled: (enabled) => {
+      if (!isRestTimerNativeSupported) return;
+
+      // O Android não deixa o app mexer na própria permissão: desligar só existe nas
+      // configurações do sistema, e o diálogo de pedir some depois de duas negações. Então cada
+      // direção do switch leva pro único lugar que funciona.
+      if (!enabled) {
+        RestTimerNative!.openNotificationSettings();
+        return;
+      }
+
+      void (async () => {
+        await requestNotificationPermission();
+        // Re-lê do sistema em vez de confiar no retorno: no Android 12 não há permissão pra pedir
+        // e mesmo assim as notificações podem estar desligadas nas configurações.
+        const granted = RestTimerNative!.areNotificationsEnabled();
+        set({ notificationsEnabled: granted });
+        if (!granted) RestTimerNative!.openNotificationSettings();
+      })();
     },
 
     setMiniBarEnabled: (enabled) => {
@@ -377,7 +400,7 @@ export const useTimerStore = create<TimerState>((set, get) => {
     /** Atalho pras configurações do sistema quando o alarme está capado por permissão. */
     openTimerSettings: () => {
       if (!isRestTimerNativeSupported) return;
-      if (get().notificationsBlocked) RestTimerNative!.openNotificationSettings();
+      if (!get().notificationsEnabled) RestTimerNative!.openNotificationSettings();
       else if (get().exactAlarmBlocked) RestTimerNative!.openExactAlarmSettings();
     },
 

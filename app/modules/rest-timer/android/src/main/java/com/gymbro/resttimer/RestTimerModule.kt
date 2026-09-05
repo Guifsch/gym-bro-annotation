@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -90,6 +91,12 @@ class RestTimerModule : Module() {
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
       }
+    }
+
+    /** Estado real do sistema — cobre tanto o POST_NOTIFICATIONS (Android 13+) quanto o usuário
+     * ter desligado as notificações do app nas configurações, que existe em qualquer versão. */
+    Function("areNotificationsEnabled") {
+      NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
     Function("canScheduleExactAlarms") {
