@@ -31,8 +31,10 @@ yarn-error.*
 *.pem
 
 # local env files
+# `.env.production` fica versionado de propósito: só tem a EXPO_PUBLIC_API_URL, que é embutida no
+# bundle de todo APK de release e portanto não é segredo — e assim a URL de produção não se perde
+# de novo. O `.env` (aponta pra máquina de quem desenvolve) continua fora.
 .env
-.env.production
 .env*.local
 
 # typescript
