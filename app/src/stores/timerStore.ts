@@ -7,6 +7,7 @@ import { createTimerPreset, deleteTimerPreset, listTimerPresets } from '@/api/wo
 import {
   RestTimerNative,
   isRestTimerNativeSupported,
+  nativeCall,
   requestNotificationPermission,
   type NativeTimerState,
 } from '@/native/rest-timer';
@@ -169,14 +170,14 @@ export const useTimerStore = create<TimerState>((set, get) => {
 
   function refreshPermissionFlags() {
     if (!isRestTimerNativeSupported) return;
-    const overlayAllowed = RestTimerNative!.canDrawOverlays();
+    const overlayAllowed = nativeCall((m) => m.canDrawOverlays(), false);
     const { bubbleEnabled, bubbleBlocked } = get();
     // Voltou das configurações do sistema com a permissão concedida: reavisa o nativo, senão a
     // bolinha só apareceria no próximo play (o `sync` dela mora no commit de estado do Kotlin).
-    if (bubbleEnabled && overlayAllowed && bubbleBlocked) RestTimerNative!.setBubbleEnabled(true);
+    if (bubbleEnabled && overlayAllowed && bubbleBlocked) nativeCall((m) => m.setBubbleEnabled(true), undefined);
     set({
-      notificationsEnabled: RestTimerNative!.areNotificationsEnabled(),
-      exactAlarmBlocked: !RestTimerNative!.canScheduleExactAlarms(),
+      notificationsEnabled: nativeCall((m) => m.areNotificationsEnabled(), true),
+      exactAlarmBlocked: !nativeCall((m) => m.canScheduleExactAlarms(), true),
       bubbleBlocked: bubbleEnabled && !overlayAllowed,
     });
   }
@@ -191,7 +192,7 @@ export const useTimerStore = create<TimerState>((set, get) => {
   /** Toque na notificação (fora dos botões) ou na bolinha abre o app já na tela do timer. */
   function openTimerScreenIfRequested() {
     if (!isRestTimerNativeSupported) return;
-    if (RestTimerNative!.consumeOpenTimerRequest()) router.push('/(tabs)/extras/timer');
+    if (nativeCall((m) => m.consumeOpenTimerRequest(), false)) router.push('/(tabs)/extras/timer');
   }
 
   // Registered once for the app's lifetime (this store is a singleton) instead of per mounted
@@ -199,7 +200,8 @@ export const useTimerStore = create<TimerState>((set, get) => {
   AppState.addEventListener('change', (state) => {
     if (state !== 'active') return;
     if (isRestTimerNativeSupported) {
-      applyNativeState(RestTimerNative!.getState());
+      const state = nativeCall((m) => m.getState(), null);
+      if (state) applyNativeState(state);
       // Voltar pro app é também a volta das telas de permissão do sistema.
       refreshPermissionFlags();
       openTimerScreenIfRequested();
@@ -243,10 +245,11 @@ export const useTimerStore = create<TimerState>((set, get) => {
       set({ presets, miniBarEnabled, defaultPresetId, vibrarAtivo, bubbleEnabled });
 
       if (isRestTimerNativeSupported) {
-        RestTimerNative!.setVibrationEnabled(vibrarAtivo);
-        RestTimerNative!.setBubbleEnabled(bubbleEnabled);
+        nativeCall((m) => m.setVibrationEnabled(vibrarAtivo), undefined);
+        nativeCall((m) => m.setBubbleEnabled(bubbleEnabled), undefined);
         // O app pode estar abrindo com um timer já rodando (ou já concluído) lá fora.
-        applyNativeState(RestTimerNative!.getState());
+        const nativeState = nativeCall((m) => m.getState(), null);
+        if (nativeState) applyNativeState(nativeState);
         refreshPermissionFlags();
         // Abertura a frio pela notificação não passa pelo AppState (o app já nasce 'active'),
         // então o pedido de abrir a tela do timer também é consumido aqui.

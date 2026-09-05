@@ -49,6 +49,22 @@ export const isRestTimerNativeSupported = Platform.OS === 'android' && nativeMod
 
 export const RestTimerNative = nativeModule;
 
+/**
+ * Chamada tolerante a JS mais novo que o APK instalado. No ciclo de dev o Metro recarrega o bundle
+ * sozinho, mas o Kotlin só entra com rebuild nativo — sem isso, uma função nativa recém-adicionada
+ * some com um "undefined is not a function" que derrubava o `hydrate` inteiro da store (e, com ele,
+ * a tela). Usado no caminho de inicialização, onde a falha é fatal; ação de usuário pode chamar o
+ * módulo direto.
+ */
+export function nativeCall<T>(call: (module: RestTimerNativeModule) => T, fallback: T): T {
+  if (!nativeModule) return fallback;
+  try {
+    return call(nativeModule);
+  } catch {
+    return fallback;
+  }
+}
+
 /** Pede POST_NOTIFICATIONS (Android 13+). Sem ela o timer continua contando e vibrando, mas nada
  * aparece na barra de notificações — que é justamente o ponto da feature.
  *
